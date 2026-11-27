@@ -165,8 +165,13 @@ def _linki(base, html):
     for m in re.finditer(r"""(?:location(?:\.href)?\s*=|location\.replace\()\s*['"]([^'"]+)['"]""", html):
         out.append((urljoin(base, m.group(1)), ""))
     # adresy zapisane w skryptach (np. menu eAIP generowane przez JavaScript)
+    bazy = [base]
+    if urlparse(base).path.lower().endswith(".js"):   # eAIP v2: adresy w menu JS są względne do <wydanie>/eAIP/
+        katalog = re.sub(r"(v2/)?js/[^/]*$|[^/]*$", "", base, count=1)
+        bazy.append(katalog + "eAIP/")
     for m in re.finditer(r"""["']([^"'<>\n]{2,250}?\.(?:html?|js)(?:#[^"'<>\s]*)?)["']""", html):
-        out.append((urldefrag(urljoin(base, m.group(1).replace("\\", "/")))[0], ""))
+        for b in bazy:
+            out.append((urldefrag(urljoin(b, m.group(1).replace("\\", "/")))[0], ""))
     out = [(u.replace(" ", "%20"), t) for u, t in out]
     return soup, out
 
@@ -263,7 +268,9 @@ def zrodlo_eaip(cfg, limit=None):
                     icao = _jest_ad2(v, prefiksy)
                     if icao:
                         if re.search(r"\.html?$", v, re.I) and _jezyk_ok(v):
-                            ad2.setdefault(icao, v)
+                            lst = ad2.setdefault(icao, [])
+                            if len(lst) < 6:
+                                lst.append(v)
                         continue
                     path = urlparse(v).path.lower()
                     if re.search(r"\.(pdf|png|jpe?g|gif|css|zip|xml|docx?|xlsx?)$", path) or re.search(r"(jquery|knockout|split|bootstrap)[^/]*\.js$", path):
@@ -276,7 +283,7 @@ def zrodlo_eaip(cfg, limit=None):
     if not ad2:
         log("    przykładowe linki:", sorted(widziane)[:25])
     log(f"    przejrzano {stron} stron, znaleziono AD 2 dla {len(ad2)} lotnisk")
-    for icao, u in list(sorted(ad2.items()))[:3]:
+    for icao, u in list(sorted(ad2.items()))[:2]:
         log(f"      np. {icao}: {u}")
     if not ad2:
         raise RuntimeError("Nie znaleziono stron AD 2")
@@ -285,11 +292,29 @@ def zrodlo_eaip(cfg, limit=None):
     pozycje = sorted(ad2.items(), key=lambda p: (p[0] not in wazne, p[0]))[: limit or None]
     lotniska = {}
     with ThreadPoolExecutor(6) as ex:
-        for icao, wynik in zip([p[0] for p in pozycje], ex.map(lambda p: _karty_ad2(*p), pozycje)):
+        for icao, wynik in zip([p[0] for p in pozycje], ex.map(lambda p: _karty_wiele(*p), pozycje)):
             if wynik and wynik["karty"]:
                 wynik["kraj"] = cfg["kraj"]
                 lotniska[icao] = wynik
     return {"cykl": airac(dt.date.fromisoformat(od))[1] if od else airac(dt.date.today())[1], "od": od, "lotniska": lotniska}
+
+
+def _karty_wiele(icao, adresy):
+    """Łączy karty ze wszystkich znalezionych stron AD 2 lotniska (eAIP v2 dzieli je na kilka plików)."""
+    wynik = None
+    for u in adresy:
+        w = _karty_ad2(icao, u)
+        if not w:
+            continue
+        if wynik is None:
+            wynik = w
+            continue
+        znane = {k["u"] for k in wynik["karty"]}
+        wynik["karty"] += [k for k in w["karty"] if k["u"] not in znane]
+        wynik["nazwa"] = wynik["nazwa"] or w["nazwa"]
+    if wynik:
+        wynik["karty"].sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k["k"]), k["n"]))
+    return wynik
 
 
 def _czysc(t):
@@ -302,6 +327,8 @@ def _karty_ad2(icao, url):
         r = get(url)
     except Exception as e:  # noqa: BLE001
         log("    !", icao, e)
+        return None
+    if not r.ok:
         return None
     soup = BeautifulSoup(r.text, "lxml")
     nazwa_lot = ""
