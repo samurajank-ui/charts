@@ -164,6 +164,10 @@ def _linki(base, html):
             out.append((urljoin(base, c.split("=", 1)[1].strip(" '\"")), ""))
     for m in re.finditer(r"""(?:location(?:\.href)?\s*=|location\.replace\()\s*['"]([^'"]+)['"]""", html):
         out.append((urljoin(base, m.group(1)), ""))
+    # adresy zapisane w skryptach (np. menu eAIP generowane przez JavaScript)
+    for m in re.finditer(r"""["']([^"'<>\n]{2,250}?\.(?:html?|js)(?:#[^"'<>\s]*)?)["']""", html):
+        out.append((urldefrag(urljoin(base, m.group(1).replace("\\", "/")))[0], ""))
+    out = [(u.replace(" ", "%20"), t) for u, t in out]
     return soup, out
 
 
@@ -214,6 +218,7 @@ def zrodlo_eaip(cfg, limit=None):
     if wydanie:
         od, url0 = wydanie
         od = od.isoformat()
+        url0 = url0.replace(" ", "%20")
     else:
         url0 = r.url
     # Zakres crawla: katalog wydania (lub host)
@@ -221,6 +226,7 @@ def zrodlo_eaip(cfg, limit=None):
     if not zakres:
         m = DATA_W_URL.search(url0)
         zakres = url0[: url0.find("/", m.end()) + 1] if m and "/" in url0[m.end():] else f"{urlparse(url0).scheme}://{urlparse(url0).netloc}/"
+    zakres = zakres.replace(" ", "%20")
     log("    zakres crawla:", zakres)
 
     kolejka, widziane, ad2 = deque([url0]), {url0}, {}
@@ -230,7 +236,8 @@ def zrodlo_eaip(cfg, limit=None):
     def pobierz(u):
         try:
             rr = get(u, tries=2, timeout=30)
-            if "html" not in rr.headers.get("content-type", "html") or not rr.ok:
+            ct = rr.headers.get("content-type", "html")
+            if not rr.ok or ("html" not in ct and not urlparse(u).path.lower().endswith(".js")):
                 return u, None
             return u, rr
         except Exception as e:  # noqa: BLE001
@@ -259,7 +266,7 @@ def zrodlo_eaip(cfg, limit=None):
                             ad2.setdefault(icao, v)
                         continue
                     path = urlparse(v).path.lower()
-                    if re.search(r"\.(pdf|png|jpe?g|gif|css|js|zip|xml|docx?|xlsx?)$", path):
+                    if re.search(r"\.(pdf|png|jpe?g|gif|css|zip|xml|docx?|xlsx?)$", path) or re.search(r"(jquery|knockout|split|bootstrap)[^/]*\.js$", path):
                         continue
                     if re.search(r"(gen|enr)[\s_\-.]*\d", path) and not re.search(r"menu|toc|index|frame", path):
                         continue
