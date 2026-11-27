@@ -19,6 +19,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import traceback
 import xml.etree.ElementTree as ET
@@ -40,8 +41,15 @@ S.headers["User-Agent"] = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (K
 S.headers["Accept-Language"] = "en-GB,en;q=0.9"
 
 
+_watek = threading.local()
+
+
 def log(*a):
-    print(*a, flush=True)
+    bufor = getattr(_watek, "bufor", None)
+    if bufor is not None:
+        bufor.append(" ".join(str(x) for x in a))
+    else:
+        print(*a, flush=True)
 
 
 def get(url, tries=3, **kw):
@@ -214,35 +222,50 @@ def zrodlo_eaip(cfg, limit=None):
     log("    zakres crawla:", zakres)
 
     kolejka, widziane, ad2 = deque([url0]), {url0}, {}
-    stron = 0
-    while kolejka and stron < cfg.get("max_stron", 400):
-        u = kolejka.popleft()
+    stron, t0 = 0, time.time()
+    budzet = cfg.get("max_sekund", 300)
+
+    def pobierz(u):
         try:
-            rr = get(u)
+            rr = get(u, tries=2, timeout=30)
+            if "html" not in rr.headers.get("content-type", "html") or not rr.ok:
+                return u, None
+            return u, rr
         except Exception as e:  # noqa: BLE001
             log("    !", u, e)
-            continue
-        stron += 1
-        if "html" not in rr.headers.get("content-type", "html"):
-            continue
-        _, linki = _linki(rr.url, rr.text)
-        for v, _t in linki:
-            if v in widziane or not v.startswith(zakres):
-                continue
-            widziane.add(v)
-            icao = _jest_ad2(v, prefiksy)
-            if icao:
-                if re.search(r"\.html?$", v, re.I) and _jezyk_ok(v):
-                    ad2.setdefault(icao, v)
-                continue
-            path = urlparse(v).path.lower()
-            if re.search(r"\.(pdf|png|jpe?g|gif|css|js|zip|xml)$", path):
-                continue
-            if re.search(r"(gen|enr)[\s_\-.]*\d", path) and not re.search(r"menu|toc|index|frame", path):
-                continue
-            if not _jezyk_ok(v):
-                continue
-            kolejka.append(v)
+            return u, None
+
+    with ThreadPoolExecutor(8) as ex:
+        while kolejka and stron < cfg.get("max_stron", 600) and time.time() - t0 < budzet:
+            if limit and len(ad2) >= limit * 3:
+                break
+            partia = [kolejka.popleft() for _ in range(min(16, len(kolejka)))]
+            for u, rr in ex.map(pobierz, partia):
+                stron += 1
+                if rr is None:
+                    continue
+                if stron <= 3:
+                    log(f"    [{stron}] {u} -> {len(rr.text)} B")
+                _, linki = _linki(rr.url, rr.text)
+                for v, _t in linki:
+                    if v in widziane or not v.startswith(zakres):
+                        continue
+                    widziane.add(v)
+                    icao = _jest_ad2(v, prefiksy)
+                    if icao:
+                        if re.search(r"\.html?$", v, re.I) and _jezyk_ok(v):
+                            ad2.setdefault(icao, v)
+                        continue
+                    path = urlparse(v).path.lower()
+                    if re.search(r"\.(pdf|png|jpe?g|gif|css|js|zip|xml|docx?|xlsx?)$", path):
+                        continue
+                    if re.search(r"(gen|enr)[\s_\-.]*\d", path) and not re.search(r"menu|toc|index|frame", path):
+                        continue
+                    if not _jezyk_ok(v):
+                        continue
+                    kolejka.append(v)
+    if not ad2:
+        log("    przykładowe linki:", sorted(widziane)[:25])
     log(f"    przejrzano {stron} stron, znaleziono AD 2 dla {len(ad2)} lotnisk")
     if not ad2:
         raise RuntimeError("Nie znaleziono stron AD 2")
@@ -374,10 +397,10 @@ def main():
     status, wszystkie = [], {}
 
     lista = [{"id": "FAA", "nazwa": "FAA d-TPP (USA)", "typ": "faa"}] + zrodla
-    for z in lista:
-        if tylko and z["id"] not in tylko:
-            continue
-        log(f"== {z['id']}: {z['nazwa']}")
+    lista = [z for z in lista if not tylko or z["id"] in tylko]
+
+    def przetworz(z):
+        _watek.bufor = [f"== {z['id']}: {z['nazwa']}"]
         t0 = time.time()
         try:
             wynik = zrodlo_faa(a.limit) if z.get("typ") == "faa" else zrodlo_eaip(z, a.limit)
@@ -385,16 +408,24 @@ def main():
                 dodaj_procedury(wynik["lotniska"], cache)
             n_kart = sum(len(l["karty"]) for l in wynik["lotniska"].values())
             log(f"   OK: {len(wynik['lotniska'])} lotnisk, {n_kart} kart, cykl {wynik['cykl']} ({time.time()-t0:.0f}s)")
-            for icao, l in wynik["lotniska"].items():
-                l["zrodlo"] = z["nazwa"]
-                l["cykl"] = wynik["cykl"]
-                l["od"] = wynik["od"]
-                wszystkie[icao] = l
-            status.append({"id": z["id"], "nazwa": z["nazwa"], "ok": True, "cykl": wynik["cykl"], "od": wynik["od"],
-                           "lotnisk": len(wynik["lotniska"]), "kart": n_kart})
+            st = {"id": z["id"], "nazwa": z["nazwa"], "ok": True, "cykl": wynik["cykl"], "od": wynik["od"],
+                  "lotnisk": len(wynik["lotniska"]), "kart": n_kart}
         except Exception as e:  # noqa: BLE001
-            traceback.print_exc()
-            status.append({"id": z["id"], "nazwa": z["nazwa"], "ok": False, "blad": str(e)[:300]})
+            log(traceback.format_exc())
+            wynik, st = None, {"id": z["id"], "nazwa": z["nazwa"], "ok": False, "blad": str(e)[:300]}
+        bufor, _watek.bufor = _watek.bufor, None
+        print("\n".join(bufor), flush=True)
+        return z, wynik, st
+
+    with ThreadPoolExecutor(6) as ex:
+        for z, wynik, st in ex.map(przetworz, lista):
+            status.append(st)
+            if wynik:
+                for icao, l in wynik["lotniska"].items():
+                    l["zrodlo"] = z["nazwa"]
+                    l["cykl"] = wynik["cykl"]
+                    l["od"] = wynik["od"]
+                    wszystkie.setdefault(icao, l)
 
     # pamięć podręczna procedur: tylko adresy z bieżącej bazy (stare cykle wypadają)
     aktualne = {k["u"] for l in wszystkie.values() for k in l["karty"]}
