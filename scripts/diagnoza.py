@@ -27,6 +27,15 @@ for u in args:
         print("BŁĄD:", e)
         continue
     print("STATUS:", r.status_code, "| FINAL:", r.url, "| TYPE:", r.headers.get("content-type"), "| BYTES:", len(r.content))
+    if u.lower().split("?")[0].endswith((".js", ".json", ".xml")):
+        t = r.text
+        if wzor:
+            for m in wzor.finditer(t):
+                print("  ...", t[max(0, m.start() - 300): m.end() + 300].replace("\n", " "))
+                if m.start() > 2_000_000:
+                    break
+        print("RAW:", t[:5000])
+        continue
     if "html" not in (r.headers.get("content-type") or "") and not r.text.lstrip().startswith("<"):
         continue
     s = BeautifulSoup(r.content, "lxml")
