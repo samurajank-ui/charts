@@ -383,7 +383,7 @@ CACHE = os.path.join(ROOT, "cache", "procedury.json")
 def dodaj_procedury(lotniska, cache):
     """Czyta nagłówek każdej karty PDF: tytuł jak w Navigraph (np. 'ILS Z RWY 33'), kategoria, procedury MCDU."""
     zadania = [k for l in lotniska.values() for k in l["karty"]]
-    nowe = sorted({k["u"] for k in zadania if not isinstance(cache.get(k["u"]), dict)})
+    nowe = sorted({k["u"] for k in zadania if not (isinstance(cache.get(k["u"]), dict) and cache[k["u"]])})
     kat_url = {k["u"]: k["c"] for k in zadania}
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
     bledy, puste = [], []
