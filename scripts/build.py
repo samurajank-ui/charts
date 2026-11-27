@@ -31,7 +31,8 @@ import requests
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(__file__))
-from procedury import z_nazwy_faa, z_pdf  # noqa: E402
+from procedury import z_nazwy_faa  # noqa: E402
+from tytuly import analiza, tekst_pdf  # noqa: E402
 from kategorie import FAA, KOLEJNOSC, kategoria, ladna_nazwa, pasy  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -379,26 +380,47 @@ CACHE = os.path.join(ROOT, "cache", "procedury.json")
 
 
 def dodaj_procedury(lotniska, cache):
-    """Dla kart SID/STAR bez nazw procedur czyta PDF i dopisuje oznaczenia w formie MCDU (pole 'p')."""
-    zadania = [k for l in lotniska.values() for k in l["karty"] if k["c"] in ("SID", "STAR") and "p" not in k]
-    nowe = [k["u"] for k in zadania if k["u"] not in cache]
-    log(f"    procedury: {len(zadania)} kart SID/STAR, {len(nowe)} PDF do przeczytania")
+    """Czyta nagłówek każdej karty PDF: tytuł jak w Navigraph (np. 'ILS Z RWY 33'), kategoria, procedury MCDU."""
+    zadania = [k for l in lotniska.values() for k in l["karty"]]
+    nowe = sorted({k["u"] for k in zadania if not isinstance(cache.get(k["u"]), dict)})
+    kat_url = {k["u"]: k["c"] for k in zadania}
+    log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
 
     def czytaj(u):
         try:
             r = get(u, timeout=90)
-            return u, z_pdf(r.content) if r.ok else []
+            if not r.ok:
+                return u, {}
+            return u, analiza(tekst_pdf(r.content), kat_url[u])
         except Exception as e:  # noqa: BLE001
             log("    ! PDF", u, e)
             return u, None
 
-    with ThreadPoolExecutor(8) as ex:
-        for u, wynik in ex.map(czytaj, sorted(set(nowe))):
+    with ThreadPoolExecutor(10) as ex:
+        for u, wynik in ex.map(czytaj, nowe):
             if wynik is not None:
                 cache[u] = wynik
-    for k in zadania:
-        if cache.get(k["u"]):
-            k["p"] = cache[k["u"]]
+    zmienione = 0
+    for l in lotniska.values():
+        for k in l["karty"]:
+            w = cache.get(k["u"])
+            if not isinstance(w, dict):
+                continue
+            if w.get("c"):
+                k["c"] = w["c"]
+            if w.get("t"):
+                k.setdefault("o", k["n"])
+                k["n"] = w["t"]
+                if k["c"] in ("SID", "STAR") and "RNAV" not in k["n"] and re.search(r"RNAV|RNP|GNSS", k["o"], re.I):
+                    k["n"] += " (RNAV)"
+                zmienione += 1
+            if w.get("p"):
+                k["p"] = w["p"]
+            if w.get("r") and not k.get("r"):
+                k["r"] = w["r"]
+        l["karty"].sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k.get("k", "")), k["n"]))
+    log(f"    tytuły z PDF: {zmienione} kart; przykłady: " +
+        " | ".join(k["n"] for l in list(lotniska.values())[:2] for k in l["karty"][:6]))
 
 
 # ---------------------------------------------------------------- lista lotnisk (OurAirports, public domain)
