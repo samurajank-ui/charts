@@ -269,7 +269,7 @@ def zrodlo_eaip(cfg, limit=None):
                     if icao:
                         if re.search(r"\.html?$", v, re.I) and _jezyk_ok(v):
                             lst = ad2.setdefault(icao, [])
-                            if len(lst) < 6:
+                            if len(lst) < 40:
                                 lst.append(v)
                         continue
                     path = urlparse(v).path.lower()
