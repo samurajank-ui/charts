@@ -34,7 +34,7 @@ def _norm_app(t):
     return t
 
 
-def tekst_pdf(dane: bytes, stron=2) -> str:
+def tekst_pdf(dane: bytes, stron=2, ocr=False) -> str:
     tekst = ""
     try:
         from pypdf import PdfReader
@@ -42,7 +42,34 @@ def tekst_pdf(dane: bytes, stron=2) -> str:
         tekst = "\n".join((p.extract_text() or "") for p in r.pages[:stron])
     except Exception:  # noqa: BLE001
         pass
+    # mało tekstu (napisy zapisane jako grafika) -> rozpoznawanie tekstu z obrazu pierwszej strony
+    if ocr and len(re.findall(r"[A-Z]{5}", tekst.upper())) < 3:
+        tekst += "\n" + _ocr(dane)
     return tekst
+
+
+def _ocr(dane: bytes) -> str:
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+    if not (shutil.which("pdftoppm") and shutil.which("tesseract")):
+        return ""
+    with tempfile.TemporaryDirectory() as d:
+        pdf = os.path.join(d, "k.pdf")
+        with open(pdf, "wb") as f:
+            f.write(dane)
+        try:
+            subprocess.run(["pdftoppm", "-r", "220", "-f", "1", "-l", "1", "-gray", "-png", pdf, os.path.join(d, "s")],
+                           check=True, timeout=120, capture_output=True)
+            png = sorted(x for x in os.listdir(d) if x.endswith(".png"))
+            if not png:
+                return ""
+            wynik = subprocess.run(["tesseract", os.path.join(d, png[0]), "-", "--psm", "11", "-l", "eng"],
+                                   timeout=180, capture_output=True, text=True)
+            return wynik.stdout
+        except Exception:  # noqa: BLE001
+            return ""
 
 
 def analiza(tekst: str, kat: str) -> dict:

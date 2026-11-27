@@ -436,9 +436,10 @@ CACHE = os.path.join(ROOT, "cache", "procedury.json")
 KONIEC_PDF = time.time() + 45 * 60   # maks. 45 min czytania PDF w jednym przebiegu (limit GitHub Actions)
 
 
-def dodaj_procedury(lotniska, cache):
-    """Czyta nagłówek każdej karty PDF: tytuł jak w Navigraph (np. 'ILS Z RWY 33'), kategoria, procedury MCDU."""
-    zadania = [k for l in lotniska.values() for k in l["karty"]]
+def dodaj_procedury(lotniska, cache, tylko_procedury=False):
+    """Czyta nagłówek każdej karty PDF: tytuł jak w Navigraph (np. 'ILS Z RWY 33'), kategoria, procedury MCDU.
+    tylko_procedury=True (FAA): czyta tylko SID/STAR i bierze z nich wyłącznie oznaczenia MCDU."""
+    zadania = [k for l in lotniska.values() for k in l["karty"] if not tylko_procedury or k["c"] in ("SID", "STAR")]
     nowe = sorted({k["u"] for k in zadania if not (isinstance(cache.get(k["u"]), dict) and cache[k["u"]])})
     kat_url = {k["u"]: k["c"] for k in zadania}
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
@@ -452,7 +453,7 @@ def dodaj_procedury(lotniska, cache):
             if not r.ok or not r.content.startswith(b"%PDF"):
                 bledy.append(f"{r.status_code} {r.headers.get('content-type')} {u}")
                 return u, None
-            tekst = tekst_pdf(r.content)
+            tekst = tekst_pdf(r.content, ocr=kat_url[u] in ("SID", "STAR"))
             if kat_url[u] in ("SID", "STAR") and not probka:
                 probka.append(re.sub(r"\s+", " ", tekst)[:700])
             if len(tekst.strip()) < 20:
@@ -477,6 +478,10 @@ def dodaj_procedury(lotniska, cache):
         for k in l["karty"]:
             w = cache.get(k["u"])
             if not isinstance(w, dict):
+                continue
+            if tylko_procedury:
+                if w.get("p"):
+                    k["p"] = sorted(set(k.get("p", [])) | set(w["p"]))
                 continue
             if w.get("c"):
                 k["c"] = w["c"]
@@ -565,8 +570,15 @@ def main():
                 wynik = zrodlo_lista_pdf(z, a.limit)
             else:
                 wynik = zrodlo_eaip(z, a.limit)
-            if z.get("typ") != "faa" and not a.bez_pdf:
-                dodaj_procedury(wynik["lotniska"], cache)
+            if not a.bez_pdf:
+                dodaj_procedury(wynik["lotniska"], cache, tylko_procedury=z.get("typ") == "faa")
+            # kontrola jakości: SID/STAR bez oznaczeń MCDU
+            ss = [(l["icao"], k) for l in wynik["lotniska"].values() for k in l["karty"] if k["c"] in ("SID", "STAR")]
+            bez = [(i, k) for i, k in ss if not k.get("p")]
+            if ss:
+                lot_bez = sorted({i for i, _ in bez})
+                log(f"   SID/STAR: {len(ss)} kart, z oznaczeniami MCDU: {len(ss) - len(bez)} "
+                    f"({100 * (len(ss) - len(bez)) // len(ss)}%); bez oznaczeń np.: {lot_bez[:12]}")
             n_kart = sum(len(l["karty"]) for l in wynik["lotniska"].values())
             log(f"   OK: {len(wynik['lotniska'])} lotnisk, {n_kart} kart, cykl {wynik['cykl']} ({time.time()-t0:.0f}s)")
             st = {"id": z["id"], "nazwa": z["nazwa"], "ok": True, "cykl": wynik["cykl"], "od": wynik["od"],

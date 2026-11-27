@@ -32,8 +32,24 @@ def z_nazwy_faa(nazwa: str):
     return None
 
 
+_KOD_FAA = re.compile(r"\(\s*([A-Z0-9]{2,6})\s*\.\s*([A-Z0-9]{2,6})\s*\)")
+
+
+def kody_komputerowe(tekst: str) -> list:
+    """Kody wydrukowane na kartach FAA: '(JFK5.JFK)' (DP) lub '(ROBUC.ROBUC3)' (STAR) -> ['JFK5'] / ['ROBUC3']."""
+    out = set()
+    for a, b in _KOD_FAA.findall(tekst.upper()):
+        for x in (a, b):
+            if re.fullmatch(r"[A-Z]{2,5}\d", x):
+                out.add(x)
+    return sorted(out)
+
+
 def z_tekstu(tekst: str) -> list:
     """Wyszukuje oznaczenia procedur w tekście karty (z PDF). Wymaga, aby punkt występował też samodzielnie na karcie."""
+    kody = kody_komputerowe(tekst)
+    if kody:
+        return kody
     t = tekst.upper()
     slowa = set(re.findall(r"\b[A-Z]{2,5}\b", t))
     znalezione = {}
