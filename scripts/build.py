@@ -145,7 +145,7 @@ def _parsuj_faa(xml, cyc, start, limit):
 
 
 # ---------------------------------------------------------------- eAIP (Eurocontrol)
-DATA_W_URL = re.compile(r"(20\d\d)-(\d\d)-(\d\d)")
+DATA_W_URL = re.compile(r"(20\d\d)[-_](\d\d)[-_](\d\d)")
 KOD_KARTY = re.compile(r"\bAD\s*2[\s.\-_]*[A-Z]{4}[\s.\-_]*\d+(?:[\s.\-_]+\d+)*", re.I)
 
 
@@ -156,7 +156,7 @@ def _linki(base, html):
         for t in soup.find_all(tag):
             v = t.get(attr)
             if v and not v.startswith(("javascript:", "mailto:", "#")):
-                out.append((urldefrag(urljoin(base, v.strip()))[0], t.get_text(" ", strip=True)))
+                out.append((urldefrag(urljoin(base, v.strip().replace("\\", "/")))[0], t.get_text(" ", strip=True)))
     # przekierowania <meta refresh> i window.location
     for m in soup.find_all("meta", attrs={"http-equiv": re.compile("refresh", re.I)}):
         c = m.get("content", "")
@@ -167,12 +167,14 @@ def _linki(base, html):
     return soup, out
 
 
-def _wybierz_wydanie(url, html):
+def _wybierz_wydanie(url, html, filtr=None):
     """Jeśli strona startowa listuje wydania z datami, zwraca link do obowiązującego (najnowsze <= dziś)."""
     _, linki = _linki(url, html)
     dzis = dt.date.today()
     kandydaci = []
     for u, _t in linki:
+        if filtr and not re.search(filtr, u):
+            continue
         m = DATA_W_URL.search(urlparse(u).path)
         if not m:
             continue
@@ -207,7 +209,7 @@ def zrodlo_eaip(cfg, limit=None):
     start = cfg["start"]
     r = get(start)
     log("  start", start, "->", r.status_code, r.url)
-    wydanie = _wybierz_wydanie(r.url, r.text)
+    wydanie = _wybierz_wydanie(r.url, r.text, cfg.get("filtr_wydania"))
     od = None
     if wydanie:
         od, url0 = wydanie
@@ -270,7 +272,8 @@ def zrodlo_eaip(cfg, limit=None):
     if not ad2:
         raise RuntimeError("Nie znaleziono stron AD 2")
 
-    pozycje = sorted(ad2.items())[: limit or None]
+    wazne = "EPWA EPKK EPGD EGLL EGKK EGCC EHAM EBBR ELLX EFHK ESSA EETN EVRA LOWW LPPT LZIB".split()
+    pozycje = sorted(ad2.items(), key=lambda p: (p[0] not in wazne, p[0]))[: limit or None]
     lotniska = {}
     with ThreadPoolExecutor(6) as ex:
         for icao, wynik in zip([p[0] for p in pozycje], ex.map(lambda p: _karty_ad2(*p), pozycje)):
@@ -300,9 +303,18 @@ def _karty_ad2(icao, url):
             nazwa_lot = _czysc(m.group(1)).title()
             break
     karty, widziane = [], set()
-    for a in soup.find_all("a", href=True):
-        u = urljoin(r.url, a["href"].strip())
-        if not re.search(r"\.pdf($|\?)", u, re.I) or u in widziane:
+    # linki do PDF: zwykłe href albo ukryte w innych atrybutach (onclick, data-*, javascript:)
+    kandydaci = []
+    for el in soup.find_all(True):
+        for at, val in el.attrs.items():
+            if not isinstance(val, str) or ".pdf" not in val.lower():
+                continue
+            m = re.search(r"""([^"'\s()]+\.pdf)(?:[?#][^"'\s()]*)?""", val, re.I)
+            if m:
+                kandydaci.append((el, m.group(1)))
+    for a, href in kandydaci:
+        u = urljoin(r.url, href.strip().replace("\\", "/"))
+        if u in widziane:
             continue
         widziane.add(u)
         wiersz = a.find_parent("tr")
