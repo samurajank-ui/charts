@@ -1,0 +1,22 @@
+[
+  {"id": "PL", "nazwa": "PANSA eAIP (Polska)", "kraj": "PL", "prefiksy": ["EP"], "start": "https://www.ais.pansa.pl/eaip/"},
+  {"id": "GB", "nazwa": "NATS eAIP (Wielka Brytania)", "kraj": "GB", "prefiksy": ["EG"], "start": "https://www.aurora.nats.co.uk/htmlAIP/Publications/"},
+  {"id": "NL", "nazwa": "LVNL eAIP (Holandia)", "kraj": "NL", "prefiksy": ["EH"], "start": "https://eaip.lvnl.nl/web/eaip/default.html"},
+  {"id": "BE", "nazwa": "skeyes eAIP (Belgia/Luksemburg)", "kraj": "BE", "prefiksy": ["EB", "EL"], "start": "https://ops.skeyes.be/html/belgocontrol_static/eaip/eAIP_Main/html/index-en-GB.html"},
+  {"id": "CZ", "nazwa": "ŘLP eAIP (Czechy)", "kraj": "CZ", "prefiksy": ["LK"], "start": "https://aim.rlp.cz/ais_data/www_main_control/frm_en_aip.htm"},
+  {"id": "SK", "nazwa": "LPS eAIP (Słowacja)", "kraj": "SK", "prefiksy": ["LZ"], "start": "https://aim.lps.sk/web/index.php?fn=200&lng=en"},
+  {"id": "FI", "nazwa": "Fintraffic eAIP (Finlandia)", "kraj": "FI", "prefiksy": ["EF"], "start": "https://www.ais.fi/eaip/"},
+  {"id": "SE", "nazwa": "LFV eAIP (Szwecja)", "kraj": "SE", "prefiksy": ["ES"], "start": "https://aro.lfv.se/content/eaip/default_offline.html"},
+  {"id": "DK", "nazwa": "Naviair eAIP (Dania)", "kraj": "DK", "prefiksy": ["EK", "BG", "BI"], "start": "https://aim.naviair.dk/"},
+  {"id": "EE", "nazwa": "EANS eAIP (Estonia)", "kraj": "EE", "prefiksy": ["EE"], "start": "https://eaip.eans.ee/"},
+  {"id": "LV", "nazwa": "LGS eAIP (Łotwa)", "kraj": "LV", "prefiksy": ["EV"], "start": "https://ais.lgs.lv/aiseaip"},
+  {"id": "LT", "nazwa": "ORO NAVIGACIJA eAIP (Litwa)", "kraj": "LT", "prefiksy": ["EY"], "start": "https://www.ans.lt/a1/aip/"},
+  {"id": "AT", "nazwa": "Austro Control eAIP (Austria)", "kraj": "AT", "prefiksy": ["LO"], "start": "https://eaip.austrocontrol.at/"},
+  {"id": "HU", "nazwa": "HungaroControl eAIP (Węgry)", "kraj": "HU", "prefiksy": ["LH"], "start": "https://ais-en.hungarocontrol.hu/aip/aip-archive/"},
+  {"id": "IE", "nazwa": "AirNav Ireland eAIP (Irlandia)", "kraj": "IE", "prefiksy": ["EI"], "start": "https://www.airnav.ie/air-traffic-management/aeronautical-information-management/aip-package"},
+  {"id": "NO", "nazwa": "Avinor eAIP (Norwegia)", "kraj": "NO", "prefiksy": ["EN"], "start": "https://aim-prod.avinor.no/no/AIP/View/Index"},
+  {"id": "PT", "nazwa": "NAV Portugal eAIP (Portugalia)", "kraj": "PT", "prefiksy": ["LP"], "start": "https://ais.nav.pt/online-eaip-en/"},
+  {"id": "RO", "nazwa": "ROMATSA eAIP (Rumunia)", "kraj": "RO", "prefiksy": ["LR"], "start": "https://www.aisro.ro/"},
+  {"id": "HR", "nazwa": "Crocontrol eAIP (Chorwacja)", "kraj": "HR", "prefiksy": ["LD"], "start": "https://www.crocontrol.hr/en/services/aeronautical-information-management/aeronautical-information-publication-aip/"},
+  {"id": "SI", "nazwa": "Slovenia Control eAIP (Słowenia)", "kraj": "SI", "prefiksy": ["LJ"], "start": "https://aim.sloveniacontrol.si/aim/products/aip/"}
+]

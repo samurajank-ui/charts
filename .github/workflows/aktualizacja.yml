@@ -1,0 +1,59 @@
+name: Aktualizacja kart
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # codziennie 03:17 UTC – nowy cykl AIRAC wchodzi w czwartek, strona łapie go tego samego dnia
+  workflow_dispatch:
+    inputs:
+      tylko:
+        description: "Tylko wybrane źródła (np. FAA,PL) – puste = wszystkie"
+        required: false
+      limit:
+        description: "Limit lotnisk na źródło (test) – puste = bez limitu"
+        required: false
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Pobierz i ułóż karty
+        run: |
+          ARGS=""
+          [ -n "${{ inputs.tylko }}" ] && ARGS="$ARGS --tylko ${{ inputs.tylko }}"
+          [ -n "${{ inputs.limit }}" ] && ARGS="$ARGS --limit ${{ inputs.limit }}"
+          python scripts/build.py $ARGS
+      - name: Podsumowanie
+        if: always()
+        run: |
+          echo '### Stan źródeł' >> $GITHUB_STEP_SUMMARY
+          python -c "import json;s=json.load(open('site/data/status.json'));[print(f\"- {'✅' if z['ok'] else '❌'} **{z['nazwa']}** – \" + (f\"{z['lotnisk']} lotnisk, {z['kart']} kart, AIRAC {z['cykl']}\" if z['ok'] else z['blad'])) for z in s['zrodla']]" >> $GITHUB_STEP_SUMMARY || true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4

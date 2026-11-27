@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charty – darmowe karty lotniskowe</title>
+<meta name="description" content="Darmowe karty SID, STAR, APP i lotniskowe z oficjalnych AIP. Do symulacji lotu.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="./" aria-label="Charty – strona główna"><span class="logo-dot"></span>Charty</a>
+  <div class="szukaj">
+    <input id="q" type="search" placeholder="Lotnisko: ICAO, IATA lub nazwa (np. EPWA, KJFK, Heathrow)" autocomplete="off" spellcheck="false">
+    <ul id="podpowiedzi" role="listbox" hidden></ul>
+  </div>
+  <button id="noc" class="ikona" title="Tryb nocny kart (N)">☾</button>
+</header>
+
+<main id="app">
+  <aside id="panel">
+    <section id="start">
+      <h2>Ulubione</h2>
+      <div id="ulubione" class="chipy"></div>
+      <h2>Ostatnio oglądane</h2>
+      <div id="ostatnie" class="chipy"></div>
+      <h2>Źródła</h2>
+      <ul id="zrodla" class="zrodla"></ul>
+      <p class="uwaga">Karty pochodzą z oficjalnych, darmowych AIP i aktualizują się automatycznie co cykl AIRAC.
+        <b>Tylko do symulacji lotu</b>, nie do prawdziwej nawigacji.</p>
+    </section>
+
+    <section id="lotnisko" hidden>
+      <div class="apt-naglowek">
+        <div>
+          <div class="apt-kod"><span id="apt-icao"></span> <span id="apt-iata" class="szary"></span>
+            <button id="gwiazdka" class="ikona" title="Dodaj do ulubionych">☆</button></div>
+          <div id="apt-nazwa" class="apt-nazwa"></div>
+          <div id="apt-info" class="szary maly"></div>
+        </div>
+      </div>
+      <nav id="zakladki" class="zakladki"></nav>
+      <div class="filtry">
+        <input id="filtr" type="search" placeholder="Filtruj karty (np. ILS 33, ARDAG)…" autocomplete="off">
+        <div id="pasy" class="pasy"></div>
+      </div>
+      <div id="brak" class="brak" hidden></div>
+      <ul id="lista" class="lista"></ul>
+    </section>
+  </aside>
+
+  <section id="podglad">
+    <div class="pasek" id="pasek" hidden>
+      <button id="wstecz" class="ikona tylko-mobile" title="Wróć do listy">←</button>
+      <div class="tytul"><b id="k-nazwa"></b><span id="k-kod" class="szary maly"></span></div>
+      <button id="poprz" class="ikona" title="Poprzednia (↑)">↑</button>
+      <button id="nast" class="ikona" title="Następna (↓)">↓</button>
+      <a id="otworz" class="przycisk" target="_blank" rel="noopener">Otwórz PDF ↗</a>
+    </div>
+    <iframe id="pdf" title="Podgląd karty" hidden></iframe>
+    <div id="pusto" class="pusto">
+      <div id="powitanie">
+        <h1>Wpisz kod lotniska</h1>
+        <p>Np. <a href="#EPWA">EPWA</a>, <a href="#EGLL">EGLL</a>, <a href="#KJFK">KJFK</a>, <a href="#KLAX">KLAX</a></p>
+        <p class="szary maly">Skróty: <kbd>/</kbd> szukaj · <kbd>↑</kbd><kbd>↓</kbd> poprzednia/następna karta · <kbd>1</kbd>–<kbd>6</kbd> zakładki · <kbd>N</kbd> tryb nocny</p>
+      </div>
+      <div id="wybierz" hidden><h1>Wybierz kartę z listy</h1></div>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

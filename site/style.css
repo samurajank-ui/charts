@@ -1,0 +1,97 @@
+:root {
+  --tlo: #0f1419; --panel: #161c23; --panel2: #1d252e; --linia: #2a343f;
+  --tekst: #e6edf3; --szary: #8b98a5; --akcent: #3d9bff;
+  --GND: #8fd16a; --SID: #ff9f43; --STAR: #b18cff; --APP: #3dd6d0; --REF: #a7b4c2;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--tlo); color: var(--tekst);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--akcent); }
+button { font: inherit; color: inherit; }
+.szary { color: var(--szary); } .maly { font-size: 12px; }
+
+.top { height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 14px;
+  background: var(--panel); border-bottom: 1px solid var(--linia); position: relative; z-index: 5; }
+.logo { font-weight: 700; font-size: 18px; color: var(--tekst); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+.logo-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--akcent); box-shadow: 0 0 12px var(--akcent); }
+.szukaj { flex: 1; max-width: 560px; position: relative; }
+#q { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--linia); background: var(--tlo);
+  color: var(--tekst); font-size: 15px; outline: none; }
+#q:focus { border-color: var(--akcent); }
+#podpowiedzi { position: absolute; top: 42px; left: 0; right: 0; margin: 0; padding: 4px; list-style: none;
+  background: var(--panel2); border: 1px solid var(--linia); border-radius: 8px; max-height: 60vh; overflow: auto;
+  box-shadow: 0 10px 30px #0008; }
+#podpowiedzi li { padding: 7px 10px; border-radius: 6px; cursor: pointer; display: flex; gap: 10px; align-items: baseline; }
+#podpowiedzi li.akt, #podpowiedzi li:hover { background: #2b3a4a; }
+#podpowiedzi .kod { font-weight: 700; font-family: ui-monospace, monospace; min-width: 44px; }
+#podpowiedzi .ile { margin-left: auto; font-size: 12px; color: var(--szary); white-space: nowrap; }
+.ikona { background: none; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 16px; }
+.ikona:hover { border-color: var(--linia); background: var(--panel2); }
+
+#app { display: flex; height: calc(100% - 52px); }
+#panel { width: 380px; min-width: 300px; background: var(--panel); border-right: 1px solid var(--linia);
+  display: flex; flex-direction: column; overflow: hidden; }
+#start { padding: 14px; overflow: auto; }
+#start h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--szary); margin: 14px 0 8px; }
+.chipy { display: flex; flex-wrap: wrap; gap: 6px; min-height: 10px; }
+.chip { padding: 4px 9px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--linia);
+  color: var(--tekst); text-decoration: none; font-family: ui-monospace, monospace; font-size: 13px; }
+.chip:hover { border-color: var(--akcent); }
+.zrodla { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+.zrodla li { padding: 3px 0; display: flex; gap: 6px; }
+.zrodla .ok { color: var(--GND); } .zrodla .zle { color: #ff6b6b; }
+.uwaga { color: var(--szary); font-size: 12px; margin-top: 18px; }
+
+#lotnisko { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.apt-naglowek { padding: 12px 14px 8px; }
+.apt-kod { font-size: 22px; font-weight: 700; font-family: ui-monospace, monospace; display: flex; align-items: center; gap: 8px; }
+.apt-kod .szary { font-size: 15px; }
+#gwiazdka { margin-left: auto; font-size: 20px; color: #ffd166; }
+.apt-nazwa { font-size: 15px; }
+.zakladki { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--linia); overflow-x: auto; }
+.zakladki button { background: none; border: none; padding: 9px 10px; cursor: pointer; color: var(--szary);
+  border-bottom: 2px solid transparent; font-weight: 600; font-size: 13px; white-space: nowrap; }
+.zakladki button.akt { color: var(--tekst); border-bottom-color: var(--kol, var(--akcent)); }
+.zakladki button .n { font-weight: 400; font-size: 11px; opacity: .7; margin-left: 3px; }
+.filtry { padding: 8px 12px; border-bottom: 1px solid var(--linia); }
+#filtr { width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--linia); background: var(--tlo); color: var(--tekst); outline: none; }
+.pasy { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.pasy button { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--linia); cursor: pointer;
+  font-family: ui-monospace, monospace; }
+.pasy button.akt { background: var(--akcent); border-color: var(--akcent); color: #fff; }
+.lista { list-style: none; margin: 0; padding: 4px 0 30px; overflow: auto; flex: 1; }
+.lista .grupa { padding: 10px 14px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--szary); }
+.lista .k { padding: 8px 14px 8px 12px; cursor: pointer; border-left: 3px solid var(--kol); display: flex; gap: 8px; align-items: center; }
+.lista .k:hover { background: var(--panel2); }
+.lista .k.akt { background: #23384d; }
+.lista .k .t { flex: 1; min-width: 0; }
+.lista .k .nazwa { font-weight: 600; font-size: 13.5px; }
+.lista .k .pod { font-size: 11.5px; color: var(--szary); display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.znacznik { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; color: #0f1419; background: var(--kol); }
+.rw { font-family: ui-monospace, monospace; background: var(--panel2); border-radius: 3px; padding: 0 4px; color: var(--tekst); }
+.pin { opacity: .25; background: none; border: none; cursor: pointer; font-size: 14px; color: #ffd166; }
+.k:hover .pin, .pin.on { opacity: 1; }
+.brak { padding: 18px 14px; color: var(--szary); }
+.brak a { display: block; margin-top: 8px; }
+
+#podglad { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #0b0f13; }
+.pasek { height: 46px; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--linia); }
+.pasek .tytul { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pasek .tytul span { margin-left: 10px; }
+.przycisk { padding: 6px 12px; border-radius: 6px; background: var(--akcent); color: #fff; text-decoration: none; font-weight: 600; font-size: 13px; white-space: nowrap; }
+#pdf { flex: 1; width: 100%; border: 0; background: #fff; }
+body.noc #pdf { filter: invert(.9) hue-rotate(180deg); }
+.pusto { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+.pusto h1 { font-size: 26px; margin: 0 0 8px; }
+kbd { background: var(--panel2); border: 1px solid var(--linia); border-radius: 4px; padding: 0 5px; font-size: 11px; }
+.tylko-mobile { display: none; }
+
+@media (max-width: 800px) {
+  #panel { width: 100%; border-right: 0; }
+  #podglad { position: fixed; inset: 52px 0 0 0; display: none; z-index: 4; }
+  body.karta #podglad { display: flex; }
+  .tylko-mobile { display: inline-block; }
+  .pusto { display: none; }
+  .top { gap: 8px; } .logo { font-size: 0; gap: 0; }
+}
