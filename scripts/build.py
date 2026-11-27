@@ -346,11 +346,16 @@ def _karty_ad2(icao, url):
         for at, val in el.attrs.items():
             if not isinstance(val, str) or ".pdf" not in val.lower():
                 continue
-            m = re.search(r"""([^"'\s()]+\.pdf)(?:[?#][^"'\s()]*)?""", val, re.I)
+            v = val.strip()
+            if at in ("href", "src", "data") and re.search(r"\.pdf(?:[?#].*)?$", v, re.I):
+                kandydaci.append((el, v))          # cały atrybut – adresy mogą zawierać spacje
+                continue
+            m = re.search(r"""["']([^"']+?\.pdf)(?:[?#][^"']*)?["']""", v, re.I) or \
+                re.search(r"""([^"'\s()]+\.pdf)(?:[?#][^"'\s()]*)?""", v, re.I)
             if m:
                 kandydaci.append((el, m.group(1)))
     for a, href in kandydaci:
-        u = urljoin(r.url, href.strip().replace("\\", "/"))
+        u = urljoin(r.url, href.strip().replace("\\", "/")).replace(" ", "%20")
         if u in widziane:
             continue
         widziane.add(u)
