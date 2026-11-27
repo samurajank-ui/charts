@@ -24,6 +24,23 @@ _GND = [
     (r"AERODROME\s+CHART|AIRPORT\s+CHART", "Aerodrome Chart"),
 ]
 _ID = r"(?:[A-Z]?\d{1,3}[A-Z]?|[A-Z])"
+_REF = [
+    (r"AERODROME\s+OBSTACLE\s+CHART[^\n]{0,20}TYPE\s*A|OBSTACLE\s+CHART\s*-?\s*ICAO\s*TYPE\s*A", "Aerodrome Obstacle Chart Type A"),
+    (r"AERODROME\s+OBSTACLE\s+CHART[^\n]{0,20}TYPE\s*B", "Aerodrome Obstacle Chart Type B"),
+    (r"AERODROME\s+OBSTACLE\s+CHART|OBSTACLE\s+CHART|CARTE\s+D.OBSTACLES", "Aerodrome Obstacle Chart"),
+    (r"(ATC\s+)?SURVEILLANCE\s+MINIMUM\s+ALTITUDE\s+CHART|ATCSMAC|MINIMUM\s+(RADAR\s+)?(VECTORING\s+)?ALTITUDE\s+CHART|CARTE\s+DES\s+ALTITUDES\s+MINIMALES",
+     "ATC Surveillance Minimum Altitude Chart"),
+    (r"PRECISION\s+APPROACH\s+TERRAIN\s+CHART", "Precision Approach Terrain Chart"),
+    (r"VISUAL\s+APPROACH\s+CHART|CARTE\s+D.APPROCHE\s+(ET\s+D.ATTERRISSAGE\s+)?A\s+VUE|\bVAC\b", "Visual Approach Chart"),
+    (r"VISUAL\s+OPERATION\s+CHART|VFR\s+(ROUTES?|CHART|ARRIVAL|DEPARTURE)", "VFR Chart"),
+    (r"NOISE\s+ABATEMENT|NOISE\s+(PREFERENTIAL|SENSITIVE)", "Noise Abatement Chart"),
+    (r"BIRD\s+(CONCENTRATION|STRIKE|HAZARD)", "Bird Concentration Chart"),
+    (r"AREA\s+CHART|TERMINAL\s+(AREA|CONTROL\s+AREA)\s+CHART|\bTMA\b[^\n]{0,30}CHART", "Area Chart"),
+    (r"HOLDING\s+(PATTERNS?|PROCEDURES?)", "Holding Chart"),
+    (r"RADAR\s+(MINIMUM|VECTORING)", "Radar Minimum Altitude Chart"),
+    (r"ENGINE\s+FAILURE|EMERGENCY\s+TURN", "Engine Failure Procedures"),
+    (r"TAKE-?OFF\s+MINIMUMS", "Takeoff Minimums"),
+]
 _QUALIF = re.compile(rf"\b(APRONS?\s+{_ID}(?:\s*,\s*{_ID}){{0,8}}(?:\s*(?:AND|&)\s*{_ID})?|CARGO\s+APRON|MILITARY\s+APRON|(?:NORTH|SOUTH|EAST|WEST)(?:ERN)?\s+(?:PART|AREA|APRON))\b", re.I)
 
 
@@ -104,11 +121,19 @@ def analiza(tekst: str, kat: str) -> dict:
         rnav = bool(re.search(r"\bRNAV\b|\bRNP\b|\bGNSS\b", T))
         if rw:
             wynik["t"] = f"{kat} RWY {'/'.join(rw[:4])}" + (" (RNAV)" if rnav else "")
-    elif kat == "GND":
+    elif kat in ("GND", "REF"):
         naglowek = T[:900]
-        trafienia = [(m.start(), nazwa) for wz, nazwa in _GND for m in [re.search(wz, naglowek)] if m]
+        # najwcześniejsze, a przy remisie najdłuższe dopasowanie (np. "... TYPE A" zamiast samego "OBSTACLE CHART")
+        trafienia = [(m.start(), -m.end(), nazwa, "GND") for wz, nazwa in _GND for m in [re.search(wz, naglowek)] if m]
+        trafienia += [(m.start(), -m.end(), nazwa, "REF") for wz, nazwa in _REF for m in [re.search(wz, naglowek)] if m]
         if trafienia:
-            nazwa = min(trafienia)[1]
+            _, _, nazwa, kk2 = min(trafienia)
+            if kk2 != kat:
+                wynik["c"] = kk2
+            if kk2 == "REF":
+                rw = pasy(naglowek)
+                wynik["t"] = nazwa + (f" RWY {'/'.join(rw[:3])}" if rw and ("Obstacle" in nazwa or "Terrain" in nazwa) else "")
+                return wynik
             q = _QUALIF.search(naglowek)
             dopisek = re.sub(r"\s+", " ", q.group(1)).title() if q else ""
             wynik["t"] = nazwa + (f" – {dopisek}" if dopisek else "")

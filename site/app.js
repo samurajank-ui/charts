@@ -6,7 +6,7 @@ const KAT = {
   SID: { n: "SID", kol: "var(--SID)" },
   STAR: { n: "STAR", kol: "var(--STAR)" },
   APP: { n: "APP", kol: "var(--APP)" },
-  REF: { n: "Inne", kol: "var(--REF)" },
+  REF: { n: "Referencyjne", kol: "var(--REF)" },
   PIN: { n: "★ Przypięte", kol: "#ffd166" },
 };
 const KOLEJ = ["GND", "SID", "STAR", "APP", "REF"];
@@ -159,7 +159,7 @@ function rysujListe() {
     let g;
     if (zakladka === "ALL" || zakladka === "PIN") g = KAT[k.c].n;
     else if (["SID", "STAR", "APP"].includes(zakladka)) g = k.r && k.r.length ? "RWY " + k.r.join(" / ") : "Ogólne";
-    else g = "";
+    else g = k.n.replace(/\s*[–(].*$/, "").replace(/\s+RWY.*$/, "").replace(/\s+\d+$/, "");
     if (!grupy.has(g)) grupy.set(g, []);
     grupy.get(g).push(k);
   }

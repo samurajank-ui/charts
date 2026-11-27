@@ -436,12 +436,24 @@ CACHE = os.path.join(ROOT, "cache", "procedury.json")
 KONIEC_PDF = time.time() + 45 * 60   # maks. 45 min czytania PDF w jednym przebiegu (limit GitHub Actions)
 
 
+ZAPASOWE = {"GND": "Aerodrome Chart", "APP": "Instrument Approach Chart", "SID": "SID", "STAR": "STAR", "REF": "Reference Chart"}
+
+
+def smieciowa(n: str) -> bool:
+    """Nazwa, której nie da się pokazać użytkownikowi: sam numer, kod pliku, ogólnik."""
+    n = (n or "").strip()
+    return (len(n) < 4 or bool(re.fullmatch(r"[\d\s\-–.()/]+", n)) or "_" in n or n.lower().endswith(".pdf")
+            or bool(re.fullmatch(r"(AD\s*2[\s.\-]*)?[A-Z]{4}[\s\-]*[\d\-. ]*", n.upper()))
+            or n.upper() in {"CHART", "ICAO", "MAP", "PDF", "LINK", "CHARTS", "MAPA", "KARTA"})
+
+
 def dodaj_procedury(lotniska, cache, tylko_procedury=False):
     """Czyta nagłówek każdej karty PDF: tytuł jak w Navigraph (np. 'ILS Z RWY 33'), kategoria, procedury MCDU.
     tylko_procedury=True (FAA): czyta tylko SID/STAR i bierze z nich wyłącznie oznaczenia MCDU."""
     zadania = [k for l in lotniska.values() for k in l["karty"] if not tylko_procedury or k["c"] in ("SID", "STAR")]
     nowe = sorted({k["u"] for k in zadania if not (isinstance(cache.get(k["u"]), dict) and cache[k["u"]])})
     kat_url = {k["u"]: k["c"] for k in zadania}
+    smieci_url = {k["u"] for k in zadania if smieciowa(k["n"])}
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
     bledy, puste, probka = [], [], []
 
@@ -453,7 +465,7 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             if not r.ok or not r.content.startswith(b"%PDF"):
                 bledy.append(f"{r.status_code} {r.headers.get('content-type')} {u}")
                 return u, None
-            tekst = tekst_pdf(r.content, ocr=kat_url[u] in ("SID", "STAR"))
+            tekst = tekst_pdf(r.content, ocr=kat_url[u] in ("SID", "STAR") or u in smieci_url)
             if kat_url[u] in ("SID", "STAR") and not probka:
                 probka.append(re.sub(r"\s+", " ", tekst)[:700])
             if len(tekst.strip()) < 20:
@@ -499,6 +511,11 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             if w.get("r") and not k.get("r"):
                 k["r"] = w["r"]
         l["karty"].sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k.get("k", "")), k["n"]))
+        # ostatnia deska ratunku: nigdy nie pokazuj śmieci jako nazwy
+        for k in l["karty"]:
+            if smieciowa(k["n"]):
+                k.setdefault("o", k["n"])
+                k["n"] = ZAPASOWE[k["c"]]
         # identyczne nazwy na jednym lotnisku -> dopisz numer karty
         ile = Counter(k["n"] for k in l["karty"])
         for k in l["karty"]:
@@ -572,6 +589,13 @@ def main():
                 wynik = zrodlo_eaip(z, a.limit)
             if not a.bez_pdf:
                 dodaj_procedury(wynik["lotniska"], cache, tylko_procedury=z.get("typ") == "faa")
+            # kontrola jakości: nazwy z pliku/kodu i ogólne nazwy zapasowe
+            wsz = [(l["icao"], k) for l in wynik["lotniska"].values() for k in l["karty"]]
+            zapas = [(i, k) for i, k in wsz if re.match(r"^(Reference Chart|Instrument Approach Chart|Aerodrome Chart \(|SID \(|STAR \()", k["n"])]
+            ref = sum(1 for _, k in wsz if k["c"] == "REF")
+            if wsz:
+                log(f"   jakość nazw: {len(wsz)} kart, ogólnych/zapasowych: {len(zapas)}, referencyjnych: {ref}; "
+                    f"np.: {[(i, k['n'], k.get('o', '')[:40]) for i, k in zapas[:6]]}")
             # kontrola jakości: SID/STAR bez oznaczeń MCDU
             ss = [(l["icao"], k) for l in wynik["lotniska"].values() for k in l["karty"] if k["c"] in ("SID", "STAR")]
             bez = [(i, k) for i, k in ss if not k.get("p")]
