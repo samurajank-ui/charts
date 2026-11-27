@@ -436,6 +436,7 @@ CACHE = os.path.join(ROOT, "cache", "procedury.json")
 KONIEC_PDF = time.time() + 45 * 60   # maks. 45 min czytania PDF w jednym przebiegu (limit GitHub Actions)
 
 
+WERSJA_ANALIZY = 2   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
 ZAPASOWE = {"GND": "Aerodrome Chart", "APP": "Instrument Approach Chart", "SID": "SID", "STAR": "STAR", "REF": "Reference Chart"}
 
 
@@ -451,7 +452,11 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
     """Czyta nagłówek każdej karty PDF: tytuł jak w Navigraph (np. 'ILS Z RWY 33'), kategoria, procedury MCDU.
     tylko_procedury=True (FAA): czyta tylko SID/STAR i bierze z nich wyłącznie oznaczenia MCDU."""
     zadania = [k for l in lotniska.values() for k in l["karty"] if not tylko_procedury or k["c"] in ("SID", "STAR")]
-    nowe = sorted({k["u"] for k in zadania if not (isinstance(cache.get(k["u"]), dict) and cache[k["u"]])})
+    def aktualne(u):
+        w = cache.get(u)
+        return isinstance(w, dict) and w and w.get("v") == WERSJA_ANALIZY
+    # najpierw karty nigdy nieczytane, potem przeczytane starszą wersją analizy
+    nowe = sorted({k["u"] for k in zadania if not aktualne(k["u"])}, key=lambda u: (isinstance(cache.get(u), dict), u))
     kat_url = {k["u"]: k["c"] for k in zadania}
     smieci_url = {k["u"] for k in zadania if smieciowa(k["n"])}
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
@@ -470,7 +475,9 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
                 probka.append(re.sub(r"\s+", " ", tekst)[:700])
             if len(tekst.strip()) < 20:
                 puste.append(u)
-            return u, analiza(tekst, kat_url[u])
+            w = analiza(tekst, kat_url[u])
+            w["v"] = WERSJA_ANALIZY
+            return u, w
         except Exception as e:  # noqa: BLE001
             log("    ! PDF", u, e)
             return u, None
