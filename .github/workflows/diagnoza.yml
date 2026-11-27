@@ -1,0 +1,26 @@
+name: Diagnoza stron
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Adresy oddzielone spacją"
+        required: true
+      grep:
+        description: "Filtr linków (regex), opcjonalnie"
+        required: false
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests beautifulsoup4 lxml
+      - env:
+          URLS: ${{ inputs.urls }}
+          GREP: ${{ inputs.grep }}
+        run: |
+          if [ -n "$GREP" ]; then python scripts/diagnoza.py $URLS --grep "$GREP"; else python scripts/diagnoza.py $URLS; fi
