@@ -13,6 +13,9 @@ _APP = re.compile(
     rf"\s*(?:-\s*)?RWY\s*\d{{2}}[LRC]?(?:\s*/\s*\d{{2}}[LRC]?)?(?:\s*\((?:AR|LPV|LNAV|RNP\s*AR|PRM)\))?)",
     re.I)
 _GND = [
+    (r"CARTE\s+DE\s+STATIONNEMENT", "Parking/Docking Chart"),
+    (r"CARTE\s+DES\s+MOUVEMENTS\s+A?U?\s*SOL", "Ground Movement Chart"),
+    (r"CARTE\s+D.A[EÉ]RODROME", "Aerodrome Chart"),
     (r"AIRCRAFT\s+PARKING\s*/\s*DOCKING\s+CHART|PARKING\s*/\s*DOCKING\s+CHART|PARKING\s+CHART|DOCKING\s+CHART", "Parking/Docking Chart"),
     (r"AERODROME\s+GROUND\s+MOVEMENT\s+CHART|GROUND\s+MOVEMENT\s+CHART", "Ground Movement Chart"),
     (r"HOT\s*SPOTS?", "Hot Spot Chart"),
@@ -20,7 +23,8 @@ _GND = [
     (r"TAXI\s*(?:ROUTES?|ING)\s+CHART|STANDARD\s+TAXI", "Taxi Routes Chart"),
     (r"AERODROME\s+CHART|AIRPORT\s+CHART", "Aerodrome Chart"),
 ]
-_QUALIF = re.compile(r"\b(APRONS?\s+[A-Z0-9]{1,4}(?:\s*,\s*[A-Z0-9]{1,4}){0,8}(?:\s*(?:AND|&)\s*[A-Z0-9]{1,4})?|CARGO\s+APRON|MILITARY\s+APRON|(?:NORTH|SOUTH|EAST|WEST)(?:ERN)?\s+(?:PART|AREA|APRON))\b", re.I)
+_ID = r"(?:[A-Z]?\d{1,3}[A-Z]?|[A-Z])"
+_QUALIF = re.compile(rf"\b(APRONS?\s+{_ID}(?:\s*,\s*{_ID}){{0,8}}(?:\s*(?:AND|&)\s*{_ID})?|CARGO\s+APRON|MILITARY\s+APRON|(?:NORTH|SOUTH|EAST|WEST)(?:ERN)?\s+(?:PART|AREA|APRON))\b", re.I)
 
 
 def _norm_app(t):
@@ -38,12 +42,6 @@ def tekst_pdf(dane: bytes, stron=2) -> str:
         tekst = "\n".join((p.extract_text() or "") for p in r.pages[:stron])
     except Exception:  # noqa: BLE001
         pass
-    if len(re.sub(r"\s", "", tekst)) < 40:          # drugi czytnik dla trudniejszych PDF
-        try:
-            from pdfminer.high_level import extract_text
-            tekst = extract_text(io.BytesIO(dane), maxpages=stron) or tekst
-        except Exception:  # noqa: BLE001
-            pass
     return tekst
 
 
@@ -54,11 +52,11 @@ def analiza(tekst: str, kat: str) -> dict:
     if not T.strip():
         return wynik
     # kategoria z nagłówka karty (gdy spis AIP był ogólnikowy)
-    if re.search(r"STANDARD\s+(INSTRUMENT\s+)?DEPARTURE\s+CHART|\bSID\b.{0,20}CHART", T):
+    if re.search(r"STANDARD\s+(INSTRUMENT\s+)?DEPARTURE\s+CHART|\bSID\b.{0,20}CHART|CARTE\s+DE\s+D[EÉ]PART", T):
         kk = "SID"
-    elif re.search(r"STANDARD\s+(INSTRUMENT\s+)?ARRIVAL\s+CHART|\bSTAR\b.{0,20}CHART", T):
+    elif re.search(r"STANDARD\s+(INSTRUMENT\s+)?ARRIVAL\s+CHART|\bSTAR\b.{0,20}CHART|CARTE\s+D.ARRIV[EÉ]E", T):
         kk = "STAR"
-    elif re.search(r"INSTRUMENT\s+APPROACH\s+CHART", T):
+    elif re.search(r"INSTRUMENT\s+APPROACH\s+CHART|CARTE\s+D.APPROCHE\s+AUX\s+INSTRUMENTS", T):
         kk = "APP"
     else:
         kk = kat
@@ -80,11 +78,13 @@ def analiza(tekst: str, kat: str) -> dict:
         if rw:
             wynik["t"] = f"{kat} RWY {'/'.join(rw[:4])}" + (" (RNAV)" if rnav else "")
     elif kat == "GND":
-        for wz, nazwa in _GND:
-            if re.search(wz, T):
-                q = _QUALIF.search(T[:600])
-                wynik["t"] = nazwa + (f" – {re.sub(r'\s+', ' ', q.group(1)).title()}" if q else "")
-                break
+        naglowek = T[:900]
+        trafienia = [(m.start(), nazwa) for wz, nazwa in _GND for m in [re.search(wz, naglowek)] if m]
+        if trafienia:
+            nazwa = min(trafienia)[1]
+            q = _QUALIF.search(naglowek)
+            dopisek = re.sub(r"\s+", " ", q.group(1)).title() if q else ""
+            wynik["t"] = nazwa + (f" – {dopisek}" if dopisek else "")
     if wynik["t"]:
         wynik["r"] = pasy(wynik["t"])
     return wynik

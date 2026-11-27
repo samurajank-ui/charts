@@ -54,7 +54,9 @@ _ZBEDNE = [
 
 def ladna_nazwa(nazwa: str, kat: str) -> str:
     """Skraca oficjalny tytuł do formy jak w Navigraph, np. 'Instrument Approach Chart - ICAO ILS RWY 33' -> 'ILS RWY 33'."""
-    n = re.sub(r"\s+", " ", nazwa or "").strip()
+    n = re.sub(r"\s*-?\s*\S*;\S*_SERVER_ID;\d+", "", nazwa or "")          # śmieci z systemów AIP (Avinor)
+    n = re.sub(r"\(\s*RNAV\s*\d?\s*(SID|STAR)?\s*BASED\s+ON\s+GNSS\s*\)", "(RNAV)", n, flags=re.I)
+    n = re.sub(r"\s+", " ", n).strip()
     if kat not in ("SID", "STAR", "APP"):
         return re.sub(r"\s*[-–]\s*ICAO\b", "", n).strip(" -–") or n
     k = re.sub(r"CHART\s*-\s*INSTRUMENT\b", "CHART", n, flags=re.I)
@@ -66,6 +68,8 @@ def ladna_nazwa(nazwa: str, kat: str) -> str:
     if m:
         k = (k[:m.start()] + m.group(2).strip() + f" ({m.group(1).upper()})" + k[m.end():]).strip()
     k = re.sub(r"\s*-\s*(?=RWY|\()", " ", k)
+    k = re.sub(r"^\s*INSTRUMENT\b\s*", "", k, flags=re.I).strip()
+    k = re.sub(r"\s*\((RNAV|RNP)\)\s*(RWY[^()]*)$", r" \2 (\1)", k).strip()   # "SID (RNAV) RWY 06" -> "SID RWY 06 (RNAV)"
     if len(k) < 3:
         return n
     if kat in ("SID", "STAR") and not re.search(rf"\b{kat}\b", k, re.I):
@@ -73,7 +77,42 @@ def ladna_nazwa(nazwa: str, kat: str) -> str:
     return k
 
 
+# Nazwy plików w stylu francuskim: AD_2_LFPG_IAC_RWY26L_ILS_Z -> ('APP', 'ILS Z RWY 26L')
+_KOD_PLIKU = {"ADC": ("GND", "Aerodrome Chart"), "APDC": ("GND", "Parking/Docking Chart"), "PDC": ("GND", "Parking/Docking Chart"),
+              "GMC": ("GND", "Ground Movement Chart"), "IAC": ("APP", ""), "SID": ("SID", "SID"), "STAR": ("STAR", "STAR"),
+              "AOC": ("REF", "Aerodrome Obstacle Chart"), "VAC": ("REF", "Visual Approach Chart"), "ARC": ("REF", "Area Chart"),
+              "PATC": ("REF", "Precision Approach Terrain Chart"), "ATCSMAC": ("REF", "ATC Surveillance Minimum Altitude Chart"),
+              "MRC": ("REF", "Minimum Radar Altitude Chart"), "INSTR": ("REF", "Instructions")}
+_NIE_KARTY = {"DATA", "TXT", "TEXT", "FASDB", "CODE"}
+
+
+def z_nazwy_pliku(opis: str, icao: str):
+    """Zwraca (kategoria, nazwa) albo ('POMIN', None) dla plików, które nie są kartami; None gdy to nie ten format."""
+    m = re.match(rf"^AD_?2_{icao}_([A-Z0-9_\-]+?)(?:\.pdf)?$", opis.strip(), re.I)
+    if not m:
+        return None
+    t = [x for x in m.group(1).upper().split("_") if x]
+    if not t or t[0] in _NIE_KARTY or any(x in _NIE_KARTY for x in t):
+        return ("POMIN", None)
+    kod, reszta = t[0], t[1:]
+    kat, nazwa = _KOD_PLIKU.get(kod, ("REF", kod.title()))
+    pasy_ = [x[3:] for x in reszta if re.fullmatch(r"RWY\d{2}[LRC]?(?:-\d{2}[LRC]?)?", x)]
+    inne = [x for x in reszta if not re.fullmatch(r"RWY\d{2}[LRC]?(?:-\d{2}[LRC]?)?|\d{1,2}", x)]
+    nr = [x for x in reszta if re.fullmatch(r"\d{1,2}", x)]
+    rwy = f"RWY {'/'.join(p.replace('-', '/') for p in pasy_)}" if pasy_ else ""
+    if kat == "APP":
+        return kat, " ".join(inne + [rwy]).strip() or "Instrument Approach Chart"
+    if kat in ("SID", "STAR"):
+        rnav = " (RNAV)" if any(x in ("RNAV", "RNP", "GNSS") for x in inne) else ""
+        inne = [x for x in inne if x not in ("RNAV", "RNP", "GNSS")]
+        return kat, (" ".join([nazwa, rwy] + inne).strip() + rnav)
+    return kat, (nazwa + (f" {int(nr[0])}" if nr and nr[0] not in ("01", "1") else "") + (f" {rwy}" if rwy else "")).strip()
+
+
 if __name__ == "__main__":
+    for t in ["AD_2_LFPG_IAC_RWY26L_ILS_Z", "AD_2_LFAC_ADC_01", "AD_2_LFAC_DATA_RWY24_RNP_CODE", "AD_2_LFPG_SID_RWY27L_RNAV", "AD_2_LFPG_PDC_03"]:
+        print(t, "->", z_nazwy_pliku(t, t.split("_")[2]))
+    print(ladna_nazwa("Standard Departure Chart - Instrument (RNAV 1 SID BASED ON GNSS) RWY 06 - TACLO;ACLO_SERVER_ID;58", "SID"))
     for t in ["ILS OR LOC RWY 33", "RNAV (GPS) Z RWY 04L", "AIRPORT DIAGRAM", "Standard Instrument Departure Chart - ICAO RWY 29",
               "ATC Surveillance Minimum Altitude Chart", "Aerodrome Obstacle Chart - ICAO Type A RWY 11/29",
               "ROBUC THREE (RNAV)", "Instrument Approach Chart - ICAO RNP RWY 15", "Parking/Docking Chart - ICAO", "TAKEOFF MINIMUMS", "Standard Arrival Chart - Instrument (STAR) - ICAO RWY 33", "Standard Departure Chart - Instrument (SID) - ICAO RWY 11 RNAV GNSS"]:

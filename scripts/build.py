@@ -33,7 +33,7 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, os.path.dirname(__file__))
 from procedury import z_nazwy_faa  # noqa: E402
 from tytuly import analiza, tekst_pdf  # noqa: E402
-from kategorie import FAA, KOLEJNOSC, kategoria, ladna_nazwa, pasy  # noqa: E402
+from kategorie import FAA, KOLEJNOSC, kategoria, ladna_nazwa, pasy, z_nazwy_pliku  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
@@ -375,6 +375,13 @@ def _karty_ad2(icao, url):
         opis = re.sub(rf"\b{icao}\b\s*[-–:]?\s*", "", opis).strip(" -–")   # "EPGD - AERODROME CHART" -> "AERODROME CHART"
         if not opis or len(opis) < 3:
             opis = _czysc(a.get_text(" ", strip=True)) or os.path.basename(urlparse(u).path)
+        zp = z_nazwy_pliku(opis, icao) or z_nazwy_pliku(os.path.splitext(os.path.basename(urlparse(u).path))[0], icao)
+        if zp and zp[0] == "POMIN":
+            continue
+        if zp:
+            kat, n = zp
+            karty.append({"n": n, "o": opis, "c": kat, "r": pasy(n), "k": kod, "u": u})
+            continue
         kat = kategoria(opis)
         karty.append({"n": ladna_nazwa(opis, kat), "o": opis, "c": kat, "r": pasy(opis), "k": kod, "u": u})
     if not karty:
@@ -426,6 +433,7 @@ def zrodlo_lista_pdf(cfg, limit=None):
 
 # ---------------------------------------------------------------- procedury SID/STAR z PDF
 CACHE = os.path.join(ROOT, "cache", "procedury.json")
+KONIEC_PDF = time.time() + 45 * 60   # maks. 45 min czytania PDF w jednym przebiegu (limit GitHub Actions)
 
 
 def dodaj_procedury(lotniska, cache):
@@ -437,6 +445,8 @@ def dodaj_procedury(lotniska, cache):
     bledy, puste, probka = [], [], []
 
     def czytaj(u):
+        if time.time() > KONIEC_PDF:
+            return u, None          # zabrakło czasu – dokończy następny przebieg
         try:
             r = get(u, timeout=90)
             if not r.ok or not r.content.startswith(b"%PDF"):
