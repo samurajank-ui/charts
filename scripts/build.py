@@ -276,6 +276,8 @@ def zrodlo_eaip(cfg, limit=None):
     if not ad2:
         log("    przykładowe linki:", sorted(widziane)[:25])
     log(f"    przejrzano {stron} stron, znaleziono AD 2 dla {len(ad2)} lotnisk")
+    for icao, u in list(sorted(ad2.items()))[:3]:
+        log(f"      np. {icao}: {u}")
     if not ad2:
         raise RuntimeError("Nie znaleziono stron AD 2")
 
@@ -335,6 +337,8 @@ def _karty_ad2(icao, url):
             opis = _czysc(a.get_text(" ", strip=True)) or os.path.basename(urlparse(u).path)
         kat = kategoria(opis)
         karty.append({"n": ladna_nazwa(opis, kat), "o": opis, "c": kat, "r": pasy(opis), "k": kod, "u": u})
+    if not karty:
+        log(f"      {icao}: 0 kart na {r.url} ({len(r.text)} B, title={soup.title.get_text(strip=True)[:60] if soup.title else ''})")
     karty.sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k["k"]), k["n"]))
     return {"icao": icao, "nazwa": nazwa_lot, "miasto": "", "karty": karty, "zrodlo_url": r.url}
 
