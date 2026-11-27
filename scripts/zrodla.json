@@ -9,5 +9,6 @@
   {"id": "EE", "nazwa": "EANS eAIP (Estonia)", "kraj": "EE", "prefiksy": ["EE"], "start": "https://eaip.eans.ee/"},
   {"id": "LV", "nazwa": "LGS eAIP (Łotwa)", "kraj": "LV", "prefiksy": ["EV"], "start": "https://ais.lgs.lv/aiseaip"},
   {"id": "AT", "nazwa": "Austro Control eAIP (Austria)", "kraj": "AT", "prefiksy": ["LO"], "start": "https://eaip.austrocontrol.at/"},
-  {"id": "PT", "nazwa": "NAV Portugal eAIP (Portugalia)", "kraj": "PT", "prefiksy": ["LP"], "start": "https://ais.nav.pt/online-eaip-en/"}
+  {"id": "PT", "nazwa": "NAV Portugal eAIP (Portugalia)", "kraj": "PT", "prefiksy": ["LP"], "start": "https://ais.nav.pt/online-eaip-en/"},
+  {"id": "ES", "nazwa": "ENAIRE AIP (Hiszpania)", "kraj": "ES", "prefiksy": ["LE", "GC", "GE"], "typ": "lista_pdf", "start": "https://aip.enaire.es/AIP/AIP-en.html", "wzor": "AD/AD2/(?P<icao>[A-Z]{4})/LE_AD_2_(?P=icao)_(?P<kod>[A-Z]+)_(?P<nr>[0-9]+[A-Z]?)_en\\.pdf$"}
 ]

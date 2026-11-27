@@ -381,6 +381,43 @@ def _klucz_kodu(k):
     return [int(x) for x in re.findall(r"\d+", k)[1:]] or [9999]
 
 
+# ---------------------------------------------------------------- AIP z listą PDF (np. Hiszpania)
+KODY_KART = {
+    "ADC": ("GND", "Aerodrome Chart"), "APDC": ("GND", "Parking/Docking Chart"), "PDC": ("GND", "Parking/Docking Chart"),
+    "GMC": ("GND", "Ground Movement Chart"), "HS": ("GND", "Hot Spot Chart"), "HOTSPOT": ("GND", "Hot Spot Chart"),
+    "IAC": ("APP", "Instrument Approach Chart"), "SID": ("SID", "SID"), "STAR": ("STAR", "STAR"),
+    "AOC": ("REF", "Aerodrome Obstacle Chart"), "ATCSMAC": ("REF", "ATC Surveillance Minimum Altitude Chart"),
+    "PATC": ("REF", "Precision Approach Terrain Chart"), "VAC": ("REF", "Visual Approach Chart"),
+    "ARC": ("REF", "Area Chart"), "TMA": ("REF", "Area Chart"), "VFR": ("REF", "VFR Chart"),
+}
+
+
+def zrodlo_lista_pdf(cfg, limit=None):
+    """Strona AIP, która podaje wprost linki do PDF kart, z ICAO i rodzajem karty w nazwie pliku."""
+    r = get(cfg["start"])
+    log("  start", cfg["start"], "->", r.status_code, len(r.text), "B")
+    wzor = re.compile(cfg["wzor"])
+    _, linki = _linki(r.url, r.text)
+    adresy = sorted({u for u, _t in linki} | {urljoin(r.url, m.group(0)) for m in re.finditer(r"""[^"'<>\s]+\.pdf""", r.text)})
+    lotniska = {}
+    for u in adresy:
+        m = wzor.search(u)
+        if not m:
+            continue
+        icao, kod, nr = m.group("icao"), m.group("kod").upper(), m.group("nr")
+        kat, nazwa = KODY_KART.get(kod, ("REF", kod))
+        l = lotniska.setdefault(icao, {"icao": icao, "nazwa": "", "miasto": "", "kraj": cfg["kraj"], "karty": []})
+        l["karty"].append({"n": f"{nazwa} {nr}" if kat in ("APP", "SID", "STAR") or nr != "1" else nazwa,
+                           "c": kat, "r": [], "k": f"{kod} {nr}", "u": u})
+    if limit:
+        wazne = "LEMD LEBL LEPA GCLP".split()
+        lotniska = dict(sorted(lotniska.items(), key=lambda p: (p[0] not in wazne, p[0]))[:limit])
+    log(f"    znaleziono {sum(len(l['karty']) for l in lotniska.values())} kart dla {len(lotniska)} lotnisk")
+    if not lotniska:
+        raise RuntimeError("Brak kart pasujących do wzorca")
+    return {"cykl": airac(dt.date.today())[1], "od": airac(dt.date.today())[0].isoformat(), "lotniska": lotniska}
+
+
 # ---------------------------------------------------------------- procedury SID/STAR z PDF
 CACHE = os.path.join(ROOT, "cache", "procedury.json")
 
@@ -506,7 +543,12 @@ def main():
         _watek.bufor = [f"== {z['id']}: {z['nazwa']}"]
         t0 = time.time()
         try:
-            wynik = zrodlo_faa(a.limit) if z.get("typ") == "faa" else zrodlo_eaip(z, a.limit)
+            if z.get("typ") == "faa":
+                wynik = zrodlo_faa(a.limit)
+            elif z.get("typ") == "lista_pdf":
+                wynik = zrodlo_lista_pdf(z, a.limit)
+            else:
+                wynik = zrodlo_eaip(z, a.limit)
             if z.get("typ") != "faa" and not a.bez_pdf:
                 dodaj_procedury(wynik["lotniska"], cache)
             n_kart = sum(len(l["karty"]) for l in wynik["lotniska"].values())
