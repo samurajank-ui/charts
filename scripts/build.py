@@ -386,7 +386,7 @@ def dodaj_procedury(lotniska, cache):
     nowe = sorted({k["u"] for k in zadania if not (isinstance(cache.get(k["u"]), dict) and cache[k["u"]])})
     kat_url = {k["u"]: k["c"] for k in zadania}
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
-    bledy, puste = [], []
+    bledy, puste, probka = [], [], []
 
     def czytaj(u):
         try:
@@ -395,6 +395,8 @@ def dodaj_procedury(lotniska, cache):
                 bledy.append(f"{r.status_code} {r.headers.get('content-type')} {u}")
                 return u, None
             tekst = tekst_pdf(r.content)
+            if kat_url[u] in ("SID", "STAR") and not probka:
+                probka.append(re.sub(r"\s+", " ", tekst)[:700])
             if len(tekst.strip()) < 20:
                 puste.append(u)
             return u, analiza(tekst, kat_url[u])
@@ -408,6 +410,8 @@ def dodaj_procedury(lotniska, cache):
                 cache[u] = wynik
     if bledy:
         log(f"    ! nieudane PDF: {len(bledy)}, np. {bledy[:2]}")
+    if probka:
+        log(f"    próbka tekstu SID/STAR: {probka[0]!r}")
     if puste:
         log(f"    ! PDF bez tekstu: {len(puste)}, np. {puste[:1]}")
     zmienione = 0
