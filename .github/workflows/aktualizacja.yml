@@ -11,6 +11,9 @@ on:
       limit:
         description: "Limit lotnisk na źródło (test) – puste = bez limitu"
         required: false
+      odswiez:
+        description: "Czytaj wszystkie PDF od nowa (tak/nie)"
+        required: false
   push:
     branches: [main]
     paths: ["site/**"]
@@ -45,6 +48,7 @@ jobs:
           ARGS=""
           [ -n "${{ inputs.tylko }}" ] && ARGS="$ARGS --tylko ${{ inputs.tylko }}"
           [ -n "${{ inputs.limit }}" ] && ARGS="$ARGS --limit ${{ inputs.limit }}"
+          [ "${{ inputs.odswiez }}" = "tak" ] && ARGS="$ARGS --odswiez-pdf"
           set -o pipefail
           python scripts/build.py $ARGS 2>&1 | tee build.log
       - name: Podsumowanie

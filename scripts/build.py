@@ -474,6 +474,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tylko", help="lista id źródeł, np. FAA,PL")
     ap.add_argument("--limit", type=int, help="maks. lotnisk na źródło (test)")
+    ap.add_argument("--odswiez-pdf", action="store_true", help="czytaj PDF od nowa (ignoruj pamięć podręczną)")
     ap.add_argument("--bez-pdf", action="store_true", help="nie czytaj PDF (bez nazw procedur)")
     ap.add_argument("--zrodla", default=os.path.join(ROOT, "scripts", "zrodla.json"), help="plik z listą eAIP")
     a = ap.parse_args()
@@ -488,6 +489,8 @@ def main():
         with open(CACHE, encoding="utf-8") as f:
             cache = json.load(f)
     except Exception:  # noqa: BLE001
+        cache = {}
+    if a.odswiez_pdf:
         cache = {}
     status, wszystkie = [], {}
 
