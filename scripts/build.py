@@ -139,8 +139,8 @@ def _parsuj_faa(xml, cyc, start, limit):
                         "kraj": "US",
                         "karty": karty,
                     }
-                    if limit and len(lotniska) >= limit:
-                        break
+                if limit and len(lotniska) >= limit:
+                    return {"cykl": cyc, "od": start.isoformat(), "lotniska": lotniska}
     return {"cykl": cyc, "od": start.isoformat(), "lotniska": lotniska}
 
 

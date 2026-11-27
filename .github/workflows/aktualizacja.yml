@@ -45,7 +45,8 @@ jobs:
           ARGS=""
           [ -n "${{ inputs.tylko }}" ] && ARGS="$ARGS --tylko ${{ inputs.tylko }}"
           [ -n "${{ inputs.limit }}" ] && ARGS="$ARGS --limit ${{ inputs.limit }}"
-          python scripts/build.py $ARGS
+          set -o pipefail
+          python scripts/build.py $ARGS 2>&1 | tee build.log
       - name: Podsumowanie
         if: always()
         run: |
@@ -54,6 +55,10 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+      - name: Log budowania (skrót)
+        if: always()
+        run: grep -vE "^\s+! .*(404|Not Found)" build.log | tail -n 400 || true
 
   deploy:
     needs: build
