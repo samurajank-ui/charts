@@ -386,13 +386,18 @@ def dodaj_procedury(lotniska, cache):
     nowe = sorted({k["u"] for k in zadania if not isinstance(cache.get(k["u"]), dict)})
     kat_url = {k["u"]: k["c"] for k in zadania}
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
+    bledy, puste = [], []
 
     def czytaj(u):
         try:
             r = get(u, timeout=90)
-            if not r.ok:
-                return u, {}
-            return u, analiza(tekst_pdf(r.content), kat_url[u])
+            if not r.ok or not r.content.startswith(b"%PDF"):
+                bledy.append(f"{r.status_code} {r.headers.get('content-type')} {u}")
+                return u, None
+            tekst = tekst_pdf(r.content)
+            if len(tekst.strip()) < 20:
+                puste.append(u)
+            return u, analiza(tekst, kat_url[u])
         except Exception as e:  # noqa: BLE001
             log("    ! PDF", u, e)
             return u, None
@@ -401,6 +406,10 @@ def dodaj_procedury(lotniska, cache):
         for u, wynik in ex.map(czytaj, nowe):
             if wynik is not None:
                 cache[u] = wynik
+    if bledy:
+        log(f"    ! nieudane PDF: {len(bledy)}, np. {bledy[:2]}")
+    if puste:
+        log(f"    ! PDF bez tekstu: {len(puste)}, np. {puste[:1]}")
     zmienione = 0
     for l in lotniska.values():
         for k in l["karty"]:
