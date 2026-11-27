@@ -209,14 +209,20 @@ def _jest_ad2(u, prefiksy):
     return None
 
 
+JEZYKI_OK = set()   # dodatkowe języki dozwolone dla bieżącego źródła (np. {"fr"} dla Francji)
+
+
 def _jezyk_ok(u):
     p = u.lower()
-    return not re.search(r"-(pl|de|fr|es|it|nl|cs|sk|hu|ro|lt|lv|et|fi|sv|no|da)-[a-z]{2}\.html?$", p)
+    m = re.search(r"-(pl|de|fr|es|it|nl|cs|sk|hu|ro|lt|lv|et|fi|sv|no|nb|da)-[a-z]{2}\.html?$", p)
+    return not m or m.group(1) in getattr(_watek, "jezyki", ())
 
 
 def zrodlo_eaip(cfg, limit=None):
     prefiksy = set(cfg["prefiksy"])
-    start = cfg["start"]
+    _watek.jezyki = set(cfg.get("jezyki", []))
+    d0 = airac(dt.date.today())[0]
+    start = cfg["start"].replace("{DATA_SIA}", d0.strftime("%d_%b_%Y").upper()).replace("{DATA_ISO}", d0.isoformat())
     r = get(start)
     log("  start", start, "->", r.status_code, r.url)
     wydanie = _wybierz_wydanie(r.url, r.text, cfg.get("filtr_wydania"))
@@ -228,7 +234,7 @@ def zrodlo_eaip(cfg, limit=None):
     else:
         url0 = r.url
     # Zakres crawla: katalog wydania (lub host)
-    zakres = cfg.get("zakres")
+    zakres = (cfg.get("zakres") or "").replace("{DATA_SIA}", d0.strftime("%d_%b_%Y").upper()).replace("{DATA_ISO}", d0.isoformat()) or None
     if not zakres:
         m = DATA_W_URL.search(url0)
         zakres = url0[: url0.find("/", m.end()) + 1] if m and "/" in url0[m.end():] else f"{urlparse(url0).scheme}://{urlparse(url0).netloc}/"

@@ -10,5 +10,7 @@
   {"id": "LV", "nazwa": "LGS eAIP (Łotwa)", "kraj": "LV", "prefiksy": ["EV"], "start": "https://ais.lgs.lv/aiseaip"},
   {"id": "AT", "nazwa": "Austro Control eAIP (Austria)", "kraj": "AT", "prefiksy": ["LO"], "start": "https://eaip.austrocontrol.at/"},
   {"id": "PT", "nazwa": "NAV Portugal eAIP (Portugalia)", "kraj": "PT", "prefiksy": ["LP"], "start": "https://ais.nav.pt/online-eaip-en/"},
-  {"id": "ES", "nazwa": "ENAIRE AIP (Hiszpania)", "kraj": "ES", "prefiksy": ["LE", "GC", "GE"], "typ": "lista_pdf", "start": "https://aip.enaire.es/AIP/AIP-en.html", "wzor": "AD/AD2/(?P<icao>[A-Z]{4})/LE_AD_2_(?P=icao)_(?P<kod>[A-Z]+)_(?P<nr>[0-9]+[A-Z]?)_en\\.pdf$"}
+  {"id": "ES", "nazwa": "ENAIRE AIP (Hiszpania)", "kraj": "ES", "prefiksy": ["LE", "GC", "GE"], "typ": "lista_pdf", "start": "https://aip.enaire.es/AIP/AIP-en.html", "wzor": "AD/AD2/(?P<icao>[A-Z]{4})/LE_AD_2_(?P=icao)_(?P<kod>[A-Z]+)_(?P<nr>[0-9]+[A-Z]?)_en\\.pdf$"},
+  {"id": "FR", "nazwa": "SIA eAIP (Francja)", "kraj": "FR", "prefiksy": ["LF"], "jezyki": ["fr"], "start": "https://www.sia.aviation-civile.gouv.fr/media/dvd/eAIP_{DATA_SIA}/FRANCE/AIRAC-{DATA_ISO}/html/index-fr-FR.html", "zakres": "https://www.sia.aviation-civile.gouv.fr/media/dvd/eAIP_{DATA_SIA}/FRANCE/AIRAC-{DATA_ISO}/", "max_sekund": 600, "max_stron": 1500},
+  {"id": "NO", "nazwa": "Avinor eAIP (Norwegia)", "kraj": "NO", "prefiksy": ["EN"], "jezyki": ["no", "nb"], "start": "https://aim-prod.avinor.no/no/AIP/"}
 ]
