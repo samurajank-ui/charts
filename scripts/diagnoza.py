@@ -46,4 +46,10 @@ for u in args:
     print(f"  (linków: {n})")
     for m in re.finditer(r"""(?:location(?:\.href)?\s*=|window\.open\(|location\.replace\()\s*['"]([^'"]+)""", r.text):
         print("  JS ->", m.group(1))
+    q = sorted(set(re.findall(r"""["']([^"'<>\s]{3,200}\.(?:html?|pdf|js|json|xml|aspx|php)(?:\?[^"'<>\s]*)?)["']""", r.text)))
+    if wzor:
+        q = [x for x in q if wzor.search(x)] or q[:40]
+    print("  CYTOWANE ADRESY:", q[:120])
+    for sc in s.find_all("script", src=True):
+        print("  SCRIPT:", urljoin(r.url, sc["src"]))
     print("TEXT:", re.sub(r"\s+", " ", s.get_text(" ", strip=True))[:1200])
