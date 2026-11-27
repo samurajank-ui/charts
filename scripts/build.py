@@ -30,6 +30,7 @@ import requests
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(__file__))
+from procedury import z_nazwy_faa, z_pdf  # noqa: E402
 from kategorie import FAA, KOLEJNOSC, kategoria, ladna_nazwa, pasy  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -111,6 +112,7 @@ def _parsuj_faa(xml, cyc, start, limit):
                         continue
                     nazwa = (rec.findtext("chart_name") or "").strip()
                     kod = (rec.findtext("chart_code") or "").strip().upper()
+                    proc = z_nazwy_faa(nazwa) if kod in ("DP", "STAR") else None
                     karty.append({
                         "n": nazwa,
                         "c": FAA.get(kod) or kategoria(nazwa),
@@ -118,6 +120,7 @@ def _parsuj_faa(xml, cyc, start, limit):
                         "k": kod,
                         "u": f"https://aeronav.faa.gov/d-tpp/{cyc}/{pdf}",
                         "s": int(rec.findtext("chartseq") or 0),
+                        **({"p": [proc]} if proc else {}),
                     })
                 if karty:
                     karty.sort(key=lambda k: (KOLEJNOSC.index(k["c"]), k["s"], k["n"]))
@@ -298,6 +301,33 @@ def _klucz_kodu(k):
     return [int(x) for x in re.findall(r"\d+", k)[1:]] or [9999]
 
 
+# ---------------------------------------------------------------- procedury SID/STAR z PDF
+CACHE = os.path.join(ROOT, "cache", "procedury.json")
+
+
+def dodaj_procedury(lotniska, cache):
+    """Dla kart SID/STAR bez nazw procedur czyta PDF i dopisuje oznaczenia w formie MCDU (pole 'p')."""
+    zadania = [k for l in lotniska.values() for k in l["karty"] if k["c"] in ("SID", "STAR") and "p" not in k]
+    nowe = [k["u"] for k in zadania if k["u"] not in cache]
+    log(f"    procedury: {len(zadania)} kart SID/STAR, {len(nowe)} PDF do przeczytania")
+
+    def czytaj(u):
+        try:
+            r = get(u, timeout=90)
+            return u, z_pdf(r.content) if r.ok else []
+        except Exception as e:  # noqa: BLE001
+            log("    ! PDF", u, e)
+            return u, None
+
+    with ThreadPoolExecutor(8) as ex:
+        for u, wynik in ex.map(czytaj, sorted(set(nowe))):
+            if wynik is not None:
+                cache[u] = wynik
+    for k in zadania:
+        if cache.get(k["u"]):
+            k["p"] = cache[k["u"]]
+
+
 # ---------------------------------------------------------------- lista lotnisk (OurAirports, public domain)
 def lista_lotnisk():
     try:
@@ -326,6 +356,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tylko", help="lista id źródeł, np. FAA,PL")
     ap.add_argument("--limit", type=int, help="maks. lotnisk na źródło (test)")
+    ap.add_argument("--bez-pdf", action="store_true", help="nie czytaj PDF (bez nazw procedur)")
     ap.add_argument("--zrodla", default=os.path.join(ROOT, "scripts", "zrodla.json"), help="plik z listą eAIP")
     a = ap.parse_args()
 
@@ -335,6 +366,11 @@ def main():
 
     os.makedirs(os.path.join(OUT, "apt"), exist_ok=True)
     baza = lista_lotnisk()
+    try:
+        with open(CACHE, encoding="utf-8") as f:
+            cache = json.load(f)
+    except Exception:  # noqa: BLE001
+        cache = {}
     status, wszystkie = [], {}
 
     lista = [{"id": "FAA", "nazwa": "FAA d-TPP (USA)", "typ": "faa"}] + zrodla
@@ -345,6 +381,8 @@ def main():
         t0 = time.time()
         try:
             wynik = zrodlo_faa(a.limit) if z.get("typ") == "faa" else zrodlo_eaip(z, a.limit)
+            if z.get("typ") != "faa" and not a.bez_pdf:
+                dodaj_procedury(wynik["lotniska"], cache)
             n_kart = sum(len(l["karty"]) for l in wynik["lotniska"].values())
             log(f"   OK: {len(wynik['lotniska'])} lotnisk, {n_kart} kart, cykl {wynik['cykl']} ({time.time()-t0:.0f}s)")
             for icao, l in wynik["lotniska"].items():
@@ -357,6 +395,12 @@ def main():
         except Exception as e:  # noqa: BLE001
             traceback.print_exc()
             status.append({"id": z["id"], "nazwa": z["nazwa"], "ok": False, "blad": str(e)[:300]})
+
+    # pamięć podręczna procedur: tylko adresy z bieżącej bazy (stare cykle wypadają)
+    aktualne = {k["u"] for l in wszystkie.values() for k in l["karty"]}
+    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+    with open(CACHE, "w", encoding="utf-8") as f:
+        json.dump({u: v for u, v in cache.items() if u in aktualne}, f, separators=(",", ":"))
 
     # zapis kart
     for icao, l in wszystkie.items():

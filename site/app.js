@@ -43,7 +43,7 @@ function szukaj(q) {
   }
   return wyn.sort((a, b) => b[0] - a[0] || a[1][0].localeCompare(b[1][0])).slice(0, 30).map((x) => x[1]);
 }
-let podp = [], podpAkt = 0;
+let podp = [], podpAkt = 0, czekaFiltr = null;
 function pokazPodpowiedzi() {
   const ul = $("#podpowiedzi");
   podp = szukaj($("#q").value); podpAkt = 0;
@@ -64,6 +64,11 @@ $("#q").addEventListener("keydown", (e) => {
     ul.children[podpAkt].scrollIntoView({ block: "nearest" });
   } else if (e.key === "Enter") {
     const v = $("#q").value.trim().toUpperCase();
+    const [kod, ...reszta] = v.split(/\s+/);
+    if (reszta.length && /^[A-Z0-9]{3,4}$/.test(kod)) {   // np. "EPWA ROPU1W" – lotnisko + filtr
+      const w = (LOTNISKA || []).find((x) => x[0] === kod || x[1] === kod);
+      czekaFiltr = reszta.join(" "); idz(w ? w[0] : kod); return;
+    }
     const w = podp[podpAkt];
     idz(w ? w[0] : v);
   } else if (e.key === "Escape") { ul.hidden = true; $("#q").blur(); }
@@ -98,6 +103,11 @@ async function otworzLotnisko(icao, kartaIdx) {
     `${esc([apt.miasto, apt.kraj].filter(Boolean).join(", "))} · ${esc(apt.zrodlo)} · AIRAC ${esc(apt.cykl)}${apt.od ? " (od " + esc(apt.od) + ")" : ""}`;
   document.title = `${apt.icao} – Charty`;
   odswiezGwiazdke();
+  if (czekaFiltr != null) {
+    zakladka = "ALL"; pas = null; $("#filtr").value = czekaFiltr; czekaFiltr = null;
+    rysujZakladki(); rysujPasy(); rysujListe();
+    if (widoczne.length) { pokazKarte(widoczne[0]); return; }
+  }
   rysujZakladki(); rysujPasy(); rysujListe();
   if (kartaIdx != null && apt.karty[kartaIdx]) pokazKarte(apt.karty[kartaIdx], false);
   else if (window.innerWidth > 800) {
@@ -141,7 +151,7 @@ $("#filtr").addEventListener("input", rysujListe);
 function rysujListe() {
   const f = $("#filtr").value.trim().toUpperCase().split(/\s+/).filter(Boolean);
   widoczne = wZakladce().filter((k) => (!pas || (k.r || []).includes(pas)) &&
-    f.every((t) => (k.n + " " + (k.k || "") + " " + (k.r || []).map((r) => "RWY" + r + " " + r).join(" ")).toUpperCase().includes(t)));
+    f.every((t) => (k.n + " " + (k.k || "") + " " + (k.p || []).join(" ") + " " + (k.r || []).map((r) => "RWY" + r + " " + r).join(" ")).toUpperCase().includes(t)));
   const piny = pinezki();
   // grupowanie: w "Wszystkie" wg kategorii, w SID/STAR/APP wg pasa
   const grupy = new Map();
@@ -159,7 +169,8 @@ function rysujListe() {
   widoczne = klucze.flatMap((g) => grupy.get(g));
   $("#lista").innerHTML = klucze.map((g) => (g ? `<li class="grupa">${esc(g)}</li>` : "") + grupy.get(g).map((k) => `
     <li class="k ${k.u === aktUrl ? "akt" : ""}" data-i="${k.i}" style="--kol:${KAT[k.c].kol}">
-      <div class="t"><div class="nazwa" title="${esc(k.o || k.n)}">${esc(k.n)}</div>
+      <div class="t">${k.p && k.p.length ? `<div class="proc">${procHtml(k.p, f)}</div>` : ""}
+        <div class="nazwa ${k.p && k.p.length ? "druga" : ""}" title="${esc(k.o || k.n)}">${esc(k.n)}</div>
         <div class="pod"><span class="znacznik">${KAT[k.c].n.toUpperCase()}</span>${k.k ? `<span>${esc(k.k)}</span>` : ""}
         ${(k.r || []).map((r) => `<span class="rw">${esc(r)}</span>`).join("")}</div></div>
       <button class="pin ${piny.includes(k.u) ? "on" : ""}" data-pin="${k.i}" title="Przypnij">★</button>
@@ -180,6 +191,15 @@ $("#lista").addEventListener("click", (e) => {
   const li = e.target.closest(".k"); if (li) pokazKarte(apt.karty[+li.dataset.i]);
 });
 
+// nazwy procedur (MCDU); pasujące do filtra – wyróżnione i na początku
+function procHtml(p, f) {
+  const traf = (x) => f.some((t) => x.includes(t));
+  const lista = [...p].sort((a, b) => traf(b) - traf(a));
+  const max = 8, pokaz = lista.slice(0, max);
+  return pokaz.map((x) => `<span class="${traf(x) ? "hit" : ""}">${esc(x)}</span>`).join("") +
+    (lista.length > max ? `<span class="wiecej">+${lista.length - max}</span>` : "");
+}
+
 function przypnij(k) {
   const all = LS.get("pin", {}); const p = all[apt.icao] || [];
   all[apt.icao] = p.includes(k.u) ? p.filter((u) => u !== k.u) : [...p, k.u];
@@ -199,7 +219,7 @@ function pokazKarte(k, hash = true) {
   $("#pasek").hidden = false; $("#pusto").hidden = true;
   const ifr = $("#pdf"); ifr.hidden = false;
   if (ifr.dataset.u !== k.u) { ifr.src = k.u + "#view=FitH"; ifr.dataset.u = k.u; }
-  $("#k-nazwa").textContent = k.n;
+  $("#k-nazwa").textContent = k.p && k.p.length ? `${k.p.join(" · ")} — ${k.n}` : k.n;
   $("#k-kod").textContent = [KAT[k.c].n, k.k].filter(Boolean).join(" · ");
   $("#otworz").href = k.u;
   document.body.classList.add("karta");

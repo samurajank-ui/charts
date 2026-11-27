@@ -4,6 +4,9 @@ Wpisujesz kod lotniska (ICAO/IATA/nazwa) i dostajesz wszystkie dostępne karty, 
 **Lotnisko** (aerodrome/parking/ground), **SID**, **STAR**, **APP** (ILS, RNP, VOR…), **Inne** – z filtrem po pasie startowym,
 wyszukiwarką, przypinaniem kart, ulubionymi lotniskami i trybem nocnym.
 
+Karty SID/STAR mają nazwy procedur **jak w MCDU** (np. `ROPU1W`, `ARDA1G`, `ROBUC3`) – można wpisać od razu
+`EPWA ROPU1W` w wyszukiwarce. Nazwy są odczytywane z tekstu PDF (Europa) lub z nazwy karty (FAA).
+
 > ⚠️ Tylko do symulacji lotu. Nie do prawdziwej nawigacji.
 
 ## Skąd są karty

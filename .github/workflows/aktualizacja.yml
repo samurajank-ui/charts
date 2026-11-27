@@ -33,6 +33,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - name: Pamięć podręczna nazw procedur
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: procedury-${{ github.run_id }}
+          restore-keys: procedury-
       - name: Pobierz i ułóż karty
         run: |
           ARGS=""

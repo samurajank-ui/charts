@@ -11,7 +11,7 @@
 <header class="top">
   <a class="logo" href="./" aria-label="Charty – strona główna"><span class="logo-dot"></span>Charty</a>
   <div class="szukaj">
-    <input id="q" type="search" placeholder="Lotnisko: ICAO, IATA lub nazwa (np. EPWA, KJFK, Heathrow)" autocomplete="off" spellcheck="false">
+    <input id="q" type="search" placeholder="Lotnisko lub lotnisko + procedura (np. EPWA, KJFK, EPWA ROPU1W)" autocomplete="off" spellcheck="false">
     <ul id="podpowiedzi" role="listbox" hidden></ul>
   </div>
   <button id="noc" class="ikona" title="Tryb nocny kart (N)">☾</button>
@@ -41,7 +41,7 @@
       </div>
       <nav id="zakladki" class="zakladki"></nav>
       <div class="filtry">
-        <input id="filtr" type="search" placeholder="Filtruj karty (np. ILS 33, ARDAG)…" autocomplete="off">
+        <input id="filtr" type="search" placeholder="Filtruj: ILS 33, ROPU1W, ARDAG…" autocomplete="off">
         <div id="pasy" class="pasy"></div>
       </div>
       <div id="brak" class="brak" hidden></div>
@@ -62,6 +62,7 @@
       <div id="powitanie">
         <h1>Wpisz kod lotniska</h1>
         <p>Np. <a href="#EPWA">EPWA</a>, <a href="#EGLL">EGLL</a>, <a href="#KJFK">KJFK</a>, <a href="#KLAX">KLAX</a></p>
+        <p>Albo od razu procedura: <a href="#" onclick="event.preventDefault();q.value='EPWA ROPU1W';q.focus()">EPWA ROPU1W</a></p>
         <p class="szary maly">Skróty: <kbd>/</kbd> szukaj · <kbd>↑</kbd><kbd>↓</kbd> poprzednia/następna karta · <kbd>1</kbd>–<kbd>6</kbd> zakładki · <kbd>N</kbd> tryb nocny</p>
       </div>
       <div id="wybierz" hidden><h1>Wybierz kartę z listy</h1></div>

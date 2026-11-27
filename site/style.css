@@ -67,6 +67,10 @@ button { font: inherit; color: inherit; }
 .lista .k.akt { background: #23384d; }
 .lista .k .t { flex: 1; min-width: 0; }
 .lista .k .nazwa { font-weight: 600; font-size: 13.5px; }
+.proc { display: flex; flex-wrap: wrap; gap: 4px 8px; font-family: ui-monospace, monospace; font-weight: 700; font-size: 13.5px; }
+.proc .hit { color: #ffd166; }
+.proc .wiecej { color: var(--szary); font-weight: 400; }
+.lista .k .nazwa.druga { font-weight: 400; font-size: 12px; color: var(--szary); margin-top: 1px; }
 .lista .k .pod { font-size: 11.5px; color: var(--szary); display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .znacznik { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; color: #0f1419; background: var(--kol); }
 .rw { font-family: ui-monospace, monospace; background: var(--panel2); border-radius: 3px; padding: 0 4px; color: var(--tekst); }
