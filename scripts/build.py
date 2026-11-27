@@ -23,7 +23,7 @@ import threading
 import time
 import traceback
 import xml.etree.ElementTree as ET
-from collections import deque
+from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse, urldefrag
 
@@ -361,6 +361,7 @@ def _karty_ad2(icao, url):
         kod = _czysc(kod_m.group(0)) if kod_m else ""
         opis = _czysc(KOD_KARTY.sub("", tekst).replace("|", " - "))
         opis = re.sub(r"(\s*-\s*){2,}", " - ", opis).strip(" -")
+        opis = re.sub(rf"\b{icao}\b\s*[-–:]?\s*", "", opis).strip(" -–")   # "EPGD - AERODROME CHART" -> "AERODROME CHART"
         if not opis or len(opis) < 3:
             opis = _czysc(a.get_text(" ", strip=True)) or os.path.basename(urlparse(u).path)
         kat = kategoria(opis)
@@ -410,7 +411,10 @@ def dodaj_procedury(lotniska, cache):
                 k["c"] = w["c"]
             if w.get("t"):
                 k.setdefault("o", k["n"])
-                k["n"] = w["t"]
+                t = w["t"]
+                if k["c"] in ("SID", "STAR") and k.get("r"):   # pas ze spisu AIP jest pewniejszy niż wszystkie pasy z karty
+                    t = re.sub(r"RWY [0-9LRC/]+", "RWY " + "/".join(k["r"]), t)
+                k["n"] = t
                 if k["c"] in ("SID", "STAR") and "RNAV" not in k["n"] and re.search(r"RNAV|RNP|GNSS", k["o"], re.I):
                     k["n"] += " (RNAV)"
                 zmienione += 1
@@ -419,6 +423,12 @@ def dodaj_procedury(lotniska, cache):
             if w.get("r") and not k.get("r"):
                 k["r"] = w["r"]
         l["karty"].sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k.get("k", "")), k["n"]))
+        # identyczne nazwy na jednym lotnisku -> dopisz numer karty
+        ile = Counter(k["n"] for k in l["karty"])
+        for k in l["karty"]:
+            if ile[k["n"]] > 1 and k.get("k"):
+                nr = re.search(r"\d+(?:[-.]\d+)+[A-Za-z]?$", k["k"].strip())
+                k["n"] = f'{k["n"]} ({nr.group(0) if nr else k["k"]})'
     log(f"    tytuły z PDF: {zmienione} kart; przykłady: " +
         " | ".join(k["n"] for l in list(lotniska.values())[:2] for k in l["karty"][:6]))
 

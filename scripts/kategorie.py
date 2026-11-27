@@ -61,6 +61,11 @@ def ladna_nazwa(nazwa: str, kat: str) -> str:
     for wz in _ZBEDNE:
         k = re.sub(wz, " ", k, flags=re.I)
     k = re.sub(r"\s+", " ", re.sub(r"(\s*[-–]\s*){2,}", " - ", k)).strip(" -–,")
+    # "SID (RNAV RWY 11)" -> "SID RWY 11 (RNAV)"
+    m = re.search(r"\(\s*(RNAV|RNP|GNSS)\s+(RWY\s*[0-9LRC/ ]+)\)", k, re.I)
+    if m:
+        k = (k[:m.start()] + m.group(2).strip() + f" ({m.group(1).upper()})" + k[m.end():]).strip()
+    k = re.sub(r"\s*-\s*(?=RWY|\()", " ", k)
     if len(k) < 3:
         return n
     if kat in ("SID", "STAR") and not re.search(rf"\b{kat}\b", k, re.I):

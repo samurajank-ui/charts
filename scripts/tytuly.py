@@ -31,12 +31,20 @@ def _norm_app(t):
 
 
 def tekst_pdf(dane: bytes, stron=2) -> str:
-    from pypdf import PdfReader
+    tekst = ""
     try:
+        from pypdf import PdfReader
         r = PdfReader(io.BytesIO(dane))
-        return "\n".join((p.extract_text() or "") for p in r.pages[:stron])
+        tekst = "\n".join((p.extract_text() or "") for p in r.pages[:stron])
     except Exception:  # noqa: BLE001
-        return ""
+        pass
+    if len(re.sub(r"\s", "", tekst)) < 40:          # drugi czytnik dla trudniejszych PDF
+        try:
+            from pdfminer.high_level import extract_text
+            tekst = extract_text(io.BytesIO(dane), maxpages=stron) or tekst
+        except Exception:  # noqa: BLE001
+            pass
+    return tekst
 
 
 def analiza(tekst: str, kat: str) -> dict:
@@ -74,7 +82,7 @@ def analiza(tekst: str, kat: str) -> dict:
     elif kat == "GND":
         for wz, nazwa in _GND:
             if re.search(wz, T):
-                q = _QUALIF.search(T)
+                q = _QUALIF.search(T[:600])
                 wynik["t"] = nazwa + (f" – {re.sub(r'\s+', ' ', q.group(1)).title()}" if q else "")
                 break
     if wynik["t"]:
