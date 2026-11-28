@@ -438,7 +438,8 @@ def zrodlo_lista_pdf(cfg, limit=None):
 
 # ---------------------------------------------------------------- procedury SID/STAR z PDF
 CACHE = os.path.join(ROOT, "cache", "procedury.json")
-KONIEC_PDF = time.time() + 45 * 60   # maks. 45 min czytania PDF w jednym przebiegu (limit GitHub Actions)
+MINUT_PDF = 55          # czas na czytanie PDF w jednym przebiegu (po zebraniu list kart ze wszystkich krajów)
+KONIEC_PDF = time.time() + MINUT_PDF * 60
 
 
 WERSJA_ANALIZY = 2   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
@@ -456,15 +457,23 @@ def smieciowa(n: str) -> bool:
 def dodaj_procedury(lotniska, cache, tylko_procedury=False):
     """Czyta nagłówek każdej karty PDF: tytuł jak w Navigraph (np. 'ILS Z RWY 33'), kategoria, procedury MCDU.
     tylko_procedury=True (FAA): czyta tylko SID/STAR i bierze z nich wyłącznie oznaczenia MCDU."""
-    zadania = [k for l in lotniska.values() for k in l["karty"] if not tylko_procedury or k["c"] in ("SID", "STAR")]
+    global KONIEC_PDF
+    KONIEC_PDF = time.time() + MINUT_PDF * 60
+    faa = lambda k: tylko_procedury or k.get("_faa")  # noqa: E731
+    zadania = [k for l in lotniska.values() for k in l["karty"] if not faa(k) or k["c"] in ("SID", "STAR")]
+    faa_url = {k["u"] for k in zadania if faa(k)}
+
     def aktualne(u):
         w = cache.get(u)
-        if tylko_procedury and isinstance(w, dict) and "p" in w:
+        if u in faa_url and isinstance(w, dict) and "p" in w:
             return True                      # FAA: liczą się tylko oznaczenia MCDU – nie czytaj ponownie
         return isinstance(w, dict) and w and w.get("v") == WERSJA_ANALIZY
-    # najpierw karty nigdy nieczytane, potem przeczytane starszą wersją analizy
-    nowe = sorted({k["u"] for k in zadania if not aktualne(k["u"])}, key=lambda u: (isinstance(cache.get(u), dict), u))
+    # kolejność: SID/STAR najpierw, potem nigdy nieczytane, potem odświeżanie; kraje wymieszane losowo
+    import random
+    los = random.Random(time.time())
     kat_url = {k["u"]: k["c"] for k in zadania}
+    nowe = sorted({k["u"] for k in zadania if not aktualne(k["u"])},
+                  key=lambda u: (kat_url[u] not in ("SID", "STAR"), isinstance(cache.get(u), dict), los.random()))
     smieci_url = {k["u"] for k in zadania if smieciowa(k["n"])}
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
     bledy, puste, probka = [], [], []
@@ -505,7 +514,7 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             w = cache.get(k["u"])
             if not isinstance(w, dict):
                 continue
-            if tylko_procedury:
+            if faa(k):
                 if w.get("p"):
                     k["p"] = sorted(set(k.get("p", [])) | set(w["p"]))
                 continue
@@ -601,22 +610,10 @@ def main():
                 wynik = zrodlo_lista_pdf(z, a.limit)
             else:
                 wynik = zrodlo_eaip(z, a.limit)
-            if not a.bez_pdf:
-                dodaj_procedury(wynik["lotniska"], cache, tylko_procedury=z.get("typ") == "faa")
-            # kontrola jakości: nazwy z pliku/kodu i ogólne nazwy zapasowe
-            wsz = [(l["icao"], k) for l in wynik["lotniska"].values() for k in l["karty"]]
-            zapas = [(i, k) for i, k in wsz if re.match(r"^(Reference Chart|Instrument Approach Chart|Aerodrome Chart \(|SID \(|STAR \()", k["n"])]
-            ref = sum(1 for _, k in wsz if k["c"] == "REF")
-            if wsz:
-                log(f"   jakość nazw: {len(wsz)} kart, ogólnych/zapasowych: {len(zapas)}, referencyjnych: {ref}; "
-                    f"np.: {[(i, k['n'], k.get('o', '')[:40]) for i, k in zapas[:6]]}")
-            # kontrola jakości: SID/STAR bez oznaczeń MCDU
-            ss = [(l["icao"], k) for l in wynik["lotniska"].values() for k in l["karty"] if k["c"] in ("SID", "STAR")]
-            bez = [(i, k) for i, k in ss if not k.get("p")]
-            if ss:
-                lot_bez = sorted({i for i, _ in bez})
-                log(f"   SID/STAR: {len(ss)} kart, z oznaczeniami MCDU: {len(ss) - len(bez)} "
-                    f"({100 * (len(ss) - len(bez)) // len(ss)}%); bez oznaczeń np.: {lot_bez[:12]}")
+            if z.get("typ") == "faa":
+                for l in wynik["lotniska"].values():
+                    for k in l["karty"]:
+                        k["_faa"] = True
             n_kart = sum(len(l["karty"]) for l in wynik["lotniska"].values())
             log(f"   OK: {len(wynik['lotniska'])} lotnisk, {n_kart} kart, cykl {wynik['cykl']} ({time.time()-t0:.0f}s)")
             st = {"id": z["id"], "nazwa": z["nazwa"], "ok": True, "cykl": wynik["cykl"], "od": wynik["od"],
@@ -638,11 +635,32 @@ def main():
                     l["od"] = wynik["od"]
                     wszystkie.setdefault(icao, l)
 
+    if not a.bez_pdf:
+        log("== Czytanie PDF (wspólna kolejka, SID/STAR najpierw)")
+        dodaj_procedury(wszystkie, cache)
+    for z in lista:
+        lot = [l for l in wszystkie.values() if l.get("zrodlo") == z["nazwa"]]
+        wsz = [(l["icao"], k) for l in lot for k in l["karty"]]
+        if not wsz:
+            continue
+        zapas = [(i, k) for i, k in wsz if re.match(r"^(Reference Chart|Instrument Approach Chart|Aerodrome Chart \(|SID \(|STAR \()", k["n"])]
+        ss = [(i, k) for i, k in wsz if k["c"] in ("SID", "STAR")]
+        bez = sorted({i for i, k in ss if not k.get("p")})
+        z_mcdu = sum(1 for _, k in ss if k.get("p"))
+        log(f"== {z['id']}: {len(lot)} lotnisk, {len(wsz)} kart | nazwy ogólne: {len(zapas)} | "
+            f"SID/STAR z MCDU: {z_mcdu}/{len(ss)} ({100 * z_mcdu // max(1, len(ss))}%)"
+            + (f" | bez MCDU np. {bez[:10]}" if bez else "")
+            + (f" | przykłady nazw ogólnych: {[(i, k['n'], k.get('o', '')[:35]) for i, k in zapas[:4]]}" if zapas else ""))
+
     # pamięć podręczna procedur: tylko adresy z bieżącej bazy (stare cykle wypadają)
     aktualne = {k["u"] for l in wszystkie.values() for k in l["karty"]}
     os.makedirs(os.path.dirname(CACHE), exist_ok=True)
     with open(CACHE, "w", encoding="utf-8") as f:
         json.dump({u: v for u, v in cache.items() if u in aktualne}, f, separators=(",", ":"))
+
+    for l in wszystkie.values():
+        for k in l["karty"]:
+            k.pop("_faa", None)
 
     # zapis kart
     for icao, l in wszystkie.items():
