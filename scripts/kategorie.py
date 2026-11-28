@@ -58,6 +58,23 @@ def ladna_nazwa(nazwa: str, kat: str) -> str:
     n = re.sub(r"\s*-?\s*\S*;\S*_SERVER_ID;\d+", "", nazwa or "")          # śmieci z systemów AIP (Avinor)
     n = re.sub(r"\(\s*RNAV\s*\d?\s*(SID|STAR)?\s*BASED\s+ON\s+GNSS\s*\)", "(RNAV)", n, flags=re.I)
     n = re.sub(r"\s+", " ", n).strip()
+    n = re.sub(r"^\d{1,2}\.\s+", "", n)                       # "13. Instrument Approach Chart" (Łotwa)
+    n = re.sub(r"\s*[—–]\s*", " - ", n)
+    if kat in ("GND", "REF"):
+        from tytuly import analiza                   # nazwa kanoniczna jak w Navigraph: "Parking/Docking Chart"
+        w = analiza(n, kat)
+        if w["t"]:
+            dop = re.search(r"\((?!\s*RWY)([^()]{1,30})\)\s*$", n)
+            return w["t"] + (f" ({dop.group(1).strip()})" if dop and "–" not in w["t"] else "")
+    if kat == "APP":
+        from tytuly import _APP, _norm_app          # tytuł podejścia jak w Navigraph: "ILS Z RWY 11"
+        a = re.sub(r"\(\s*CAT\s+[A-E](?:\s*,\s*[A-E])*\s*\)", " ", n, flags=re.I)        # "(CAT A,B,C,D)"
+        a = re.sub(r"\bCAT\s*I{1,3}(?:\s*(?:&|AND|/|,)\s*I{1,3})*\b", " ", a, flags=re.I)   # "ILS CAT II & III"
+        a = re.sub(r"\(\s*([^()]{2,40}?)\s*\)\s*(?=RWY)", r"\1 ", a)                       # "(RNP) RWY 29" -> "RNP RWY 29"
+        t = [_norm_app(m.group(1)) for m in _APP.finditer(a.upper())]
+        t = [x for x in t if 6 <= len(x) <= 50]
+        if t:
+            return max(t, key=len)
     if kat not in ("SID", "STAR", "APP"):
         return re.sub(r"\s*[-–]\s*ICAO\b", "", n).strip(" -–") or n
     k = re.sub(r"CHART\s*-\s*INSTRUMENT\b", "CHART", n, flags=re.I)
@@ -103,6 +120,8 @@ def z_nazwy_pliku(opis: str, icao: str):
     if not t or t[0] in _NIE_KARTY or any(x in _NIE_KARTY for x in t):
         return ("POMIN", None)
     kod, reszta = t[0], t[1:]
+    if not re.fullmatch(r"[A-Z]{2,}", kod):
+        return None                     # 'AD_2_EPGD_12-1' – sam numer strony, nie kod karty
     kat, nazwa = _KOD_PLIKU.get(kod, ("REF", kod.title()))
     pasy_ = [x[3:] for x in reszta if re.fullmatch(r"RWY\d{2}[LRC]?(?:-\d{2}[LRC]?)?", x)]
     inne = [x for x in reszta if not re.fullmatch(r"RWY\d{2}[LRC]?(?:-\d{2}[LRC]?)?|\d{1,2}", x)]

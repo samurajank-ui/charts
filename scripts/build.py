@@ -27,8 +27,11 @@ from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse, urldefrag
 
+import logging
 import requests
 from bs4 import BeautifulSoup
+
+logging.getLogger("pypdf").setLevel(logging.ERROR)   # ostrzeżenia o czcionkach zalewały log
 
 sys.path.insert(0, os.path.dirname(__file__))
 from procedury import z_nazwy_faa  # noqa: E402
@@ -378,9 +381,9 @@ def _karty_ad2(icao, url):
         plik = os.path.splitext(os.path.basename(urlparse(u).path))[0]
         if re.fullmatch(rf"[A-Z]{{2}}[-_ ]?AD[-_ ]?2[-_. ]{icao}([-_][a-z]{{2}}[-_][A-Z]{{2}})?", plik, re.I):
             continue          # PDF całego rozdziału AD 2 (tekst), a nie karta
-        zp = z_nazwy_pliku(opis, icao) or z_nazwy_pliku(plik, icao)
+        zp = z_nazwy_pliku(opis, icao)
         if not zp and (smieciowa(ladna_nazwa(opis, kategoria(opis))) or len(opis) < 12):
-            zp = z_kodu(opis, icao) or z_kodu(plik, icao)
+            zp = z_nazwy_pliku(plik, icao) or z_kodu(opis, icao) or z_kodu(plik, icao)
         if zp and zp[0] == "POMIN":
             continue
         if zp:
@@ -442,7 +445,7 @@ MINUT_PDF = 55          # czas na czytanie PDF w jednym przebiegu (po zebraniu l
 KONIEC_PDF = time.time() + MINUT_PDF * 60
 
 
-WERSJA_ANALIZY = 2   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
+WERSJA_ANALIZY = 3   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
 ZAPASOWE = {"GND": "Aerodrome Chart", "APP": "Instrument Approach Chart", "SID": "SID", "STAR": "STAR", "REF": "Reference Chart"}
 
 
@@ -467,14 +470,20 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
         w = cache.get(u)
         if u in faa_url and isinstance(w, dict) and "p" in w:
             return True                      # FAA: liczą się tylko oznaczenia MCDU – nie czytaj ponownie
-        return isinstance(w, dict) and w and w.get("v") == WERSJA_ANALIZY
+        if not (isinstance(w, dict) and w):
+            return False
+        if w.get("v") == WERSJA_ANALIZY:
+            return True
+        # wersja 2 (bez fontTools): zostaw udane odczyty, ponów te bez wyniku
+        return w.get("v") == 2 and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
     # kolejność: SID/STAR najpierw, potem nigdy nieczytane, potem odświeżanie; kraje wymieszane losowo
     import random
     los = random.Random(time.time())
     kat_url = {k["u"]: k["c"] for k in zadania}
+    smieci_url = {k["u"] for k in zadania if smieciowa(k["n"]) or k["n"] in ZAPASOWE.values()}
     nowe = sorted({k["u"] for k in zadania if not aktualne(k["u"])},
-                  key=lambda u: (kat_url[u] not in ("SID", "STAR"), isinstance(cache.get(u), dict), los.random()))
-    smieci_url = {k["u"] for k in zadania if smieciowa(k["n"])}
+                  key=lambda u: (kat_url[u] not in ("SID", "STAR") and u not in smieci_url,   # nieznane karty mogą być SID/STAR
+                                 isinstance(cache.get(u), dict), los.random()))
     log(f"    karty PDF: {len(zadania)}, do przeczytania {len(nowe)}")
     bledy, puste, probka = [], [], []
 
@@ -493,9 +502,11 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
                 puste.append(u)
             w = analiza(tekst, kat_url[u])
             w["v"] = WERSJA_ANALIZY
+            if kat_url[u] in ("SID", "STAR") and not w["p"]:
+                w["x"] = re.sub(r"\s+", " ", tekst)[:400]     # do diagnozy w logu
             return u, w
         except Exception as e:  # noqa: BLE001
-            log("    ! PDF", u, e)
+            bledy.append(f"{type(e).__name__}: {str(e)[:80]} {u}")
             return u, None
 
     with ThreadPoolExecutor(16) as ex:
@@ -503,7 +514,8 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             if wynik is not None:
                 cache[u] = wynik
     if bledy:
-        log(f"    ! nieudane PDF: {len(bledy)}, np. {bledy[:2]}")
+        po_hoscie = Counter(urlparse(b.rsplit(" ", 1)[-1]).netloc for b in bledy)
+        log(f"    ! nieudane PDF: {len(bledy)} {dict(po_hoscie)}, np. {bledy[:3]}")
     if probka:
         log(f"    próbka tekstu SID/STAR: {probka[0]!r}")
     if puste:
@@ -536,6 +548,10 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
         l["karty"].sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k.get("k", "")), k["n"]))
         # ostatnia deska ratunku: nigdy nie pokazuj śmieci jako nazwy
         for k in l["karty"]:
+            # SID/STAR bez pasa w tytule (np. UK 'STAR (7-1)') -> nazwa z procedur, jak w Navigraph
+            if k["c"] in ("SID", "STAR") and k.get("p") and re.fullmatch(rf"{k['c']}(\s*\(RNAV\))?|\S*_\S*|[\d\s\-–.()/]*", k["n"].strip()):
+                k.setdefault("o", k["n"])
+                k["n"] = f"{', '.join(k['p'][:6])}{'…' if len(k['p']) > 6 else ''}" + (" (RNAV)" if "RNAV" in k["n"] else "")
             if smieciowa(k["n"]):
                 k.setdefault("o", k["n"])
                 k["n"] = ZAPASOWE[k["c"]]
@@ -650,13 +666,15 @@ def main():
         log(f"== {z['id']}: {len(lot)} lotnisk, {len(wsz)} kart | nazwy ogólne: {len(zapas)} | "
             f"SID/STAR z MCDU: {z_mcdu}/{len(ss)} ({100 * z_mcdu // max(1, len(ss))}%)"
             + (f" | bez MCDU np. {bez[:10]}" if bez else "")
+            + (f" | tekst karty bez MCDU: {next((cache[k['u']]['x'] for _, k in ss if isinstance(cache.get(k['u']), dict) and cache[k['u']].get('x')), '')[:300]!r}" if bez else "")
             + (f" | przykłady nazw ogólnych: {[(i, k['n'], k.get('o', '')[:35]) for i, k in zapas[:4]]}" if zapas else ""))
 
     # pamięć podręczna procedur: tylko adresy z bieżącej bazy (stare cykle wypadają)
     aktualne = {k["u"] for l in wszystkie.values() for k in l["karty"]}
     os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+    czesciowy = bool(a.tylko or a.limit)      # test na części źródeł nie może skasować pamięci reszty
     with open(CACHE, "w", encoding="utf-8") as f:
-        json.dump({u: v for u, v in cache.items() if u in aktualne}, f, separators=(",", ":"))
+        json.dump({u: v for u, v in cache.items() if czesciowy or u in aktualne}, f, separators=(",", ":"))
 
     for l in wszystkie.values():
         for k in l["karty"]:
