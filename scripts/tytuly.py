@@ -1,5 +1,6 @@
 """Tytuły kart odczytane z nagłówka PDF – tak jak pokazuje je Navigraph (np. 'ILS Z RWY 33', 'RNP RWY 15')."""
 import io
+import os
 import re
 from collections import Counter
 
@@ -59,10 +60,17 @@ def tekst_pdf(dane: bytes, stron=2, ocr=False) -> str:
         tekst = "\n".join((p.extract_text() or "") for p in r.pages[:stron])
     except Exception:  # noqa: BLE001
         pass
+    # czcionki bez mapy znaków (Francja): glify '/MT53' to kody ASCII -> '5'
+    if tekst.count("/MT") > 20:
+        tekst = re.sub(r"/MT(\d{2,3})", lambda m: chr(int(m.group(1))) if 32 <= int(m.group(1)) < 256 else " ", tekst)
     # mało tekstu (napisy zapisane jako grafika) -> rozpoznawanie tekstu z obrazu pierwszej strony
     if ocr and len(re.findall(r"[A-Z]{5}", tekst.upper())) < 3:
         tekst += "\n" + _ocr(dane)
     return tekst
+
+
+STAT = {"ocr": 0}
+os.environ.setdefault("OMP_THREAD_LIMIT", "1")   # wiele tesseractów równolegle – bez tego walczą o rdzenie
 
 
 def _ocr(dane: bytes) -> str:
@@ -82,6 +90,7 @@ def _ocr(dane: bytes) -> str:
             png = sorted(x for x in os.listdir(d) if x.endswith(".png"))
             if not png:
                 return ""
+            STAT["ocr"] += 1
             wynik = subprocess.run(["tesseract", os.path.join(d, png[0]), "-", "--psm", "11", "-l", "eng"],
                                    timeout=180, capture_output=True, text=True)
             return wynik.stdout

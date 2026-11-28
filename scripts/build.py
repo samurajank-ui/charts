@@ -56,11 +56,31 @@ def log(*a):
         print(*a, flush=True)
 
 
+def _bez_gzip(url, timeout):
+    """Serwer (skeyes) deklaruje gzip, ale wysyła coś innego – pobierz surowe bajty i rozpakuj, jeśli się da."""
+    import zlib
+    r = S.get(url, timeout=timeout, stream=True, headers={"Accept-Encoding": "identity"})
+    surowe = r.raw.read(decode_content=False)
+    for wb in (31, 15, -15):           # gzip, zlib, deflate bez nagłówka
+        try:
+            surowe = zlib.decompress(surowe, wb)
+            break
+        except zlib.error:
+            pass
+    r._content = surowe
+    r._content_consumed = True
+    return r
+
+
 def get(url, tries=3, **kw):
     last = None
+    timeout = kw.pop("timeout", 60)
     for i in range(tries):
         try:
-            r = S.get(url, timeout=kw.pop("timeout", 60), **kw)
+            try:
+                r = S.get(url, timeout=timeout, **kw)
+            except requests.exceptions.ContentDecodingError:
+                r = _bez_gzip(url, timeout)
             if r.status_code == 404:
                 return r
             r.raise_for_status()
@@ -445,7 +465,7 @@ MINUT_PDF = 55          # czas na czytanie PDF w jednym przebiegu (po zebraniu l
 KONIEC_PDF = time.time() + MINUT_PDF * 60
 
 
-WERSJA_ANALIZY = 3   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
+WERSJA_ANALIZY = 4   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
 ZAPASOWE = {"GND": "Aerodrome Chart", "APP": "Instrument Approach Chart", "SID": "SID", "STAR": "STAR", "REF": "Reference Chart"}
 
 
@@ -474,8 +494,8 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             return False
         if w.get("v") == WERSJA_ANALIZY:
             return True
-        # wersja 2 (bez fontTools): zostaw udane odczyty, ponów te bez wyniku
-        return w.get("v") == 2 and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
+        # starsze wersje (bez fontTools / dekodowania '/MT'): zostaw udane odczyty, ponów te bez wyniku
+        return w.get("v") in (2, 3) and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
     # kolejność: SID/STAR najpierw, potem nigdy nieczytane, potem odświeżanie; kraje wymieszane losowo
     import random
     los = random.Random(time.time())
@@ -509,10 +529,15 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             bledy.append(f"{type(e).__name__}: {str(e)[:80]} {u}")
             return u, None
 
+    t0, przeczytane = time.time(), Counter()
     with ThreadPoolExecutor(16) as ex:
         for u, wynik in ex.map(czytaj, nowe):
             if wynik is not None:
                 cache[u] = wynik
+                przeczytane[urlparse(u).netloc] += 1
+    from tytuly import STAT
+    log(f"    przeczytano {sum(przeczytane.values())}/{len(nowe)} PDF w {(time.time() - t0) / 60:.0f} min "
+        f"(OCR: {STAT['ocr']}), wg serwera: {dict(przeczytane.most_common())}")
     if bledy:
         po_hoscie = Counter(urlparse(b.rsplit(" ", 1)[-1]).netloc for b in bledy)
         log(f"    ! nieudane PDF: {len(bledy)} {dict(po_hoscie)}, np. {bledy[:3]}")
