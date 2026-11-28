@@ -332,6 +332,14 @@ def zrodlo_eaip(cfg, limit=None):
 def _karty_wiele(icao, adresy):
     """Łączy karty ze wszystkich znalezionych stron AD 2 lotniska (eAIP v2 dzieli je na kilka plików)."""
     wynik = None
+
+    def przyszle(u):     # strony następnego wydania (np. Słowacja: .../AIP_SR_EFF_24DEC2026/...) na koniec
+        m = re.search(r"(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{4})", u.upper())
+        if not m:
+            return False
+        d = dt.datetime.strptime("".join(m.groups()), "%d%b%Y").date()
+        return d > dt.date.today()
+    adresy = sorted(adresy, key=przyszle)
     for u in adresy:
         w = _karty_ad2(icao, u)
         if not w:
@@ -339,8 +347,8 @@ def _karty_wiele(icao, adresy):
         if wynik is None:
             wynik = w
             continue
-        znane = {k["u"] for k in wynik["karty"]}
-        wynik["karty"] += [k for k in w["karty"] if k["u"] not in znane]
+        znane = {k["u"] for k in wynik["karty"]} | {(k["k"], k["o"]) for k in wynik["karty"] if k["k"]}
+        wynik["karty"] += [k for k in w["karty"] if k["u"] not in znane and (k["k"], k["o"]) not in znane]
         wynik["nazwa"] = wynik["nazwa"] or w["nazwa"]
     if wynik:
         wynik["karty"].sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k["k"]), k["n"]))
@@ -350,6 +358,35 @@ def _karty_wiele(icao, adresy):
 def _czysc(t):
     t = re.sub(r"\s+", " ", t or "").strip(" -–|:;,")
     return t
+
+
+# Portugalia: numer rozdziału AD 2.24.NN w nazwie pliku LP_AD_2_LPPT_08-1_en.pdf
+_PT_AD224 = {"01": ("GND", "Aerodrome Chart"), "02": ("GND", "Parking/Docking Chart"), "03": ("GND", "Ground Movement Chart"),
+             "04": ("REF", "Aerodrome Obstacle Chart Type A"), "08": ("SID", "SID"), "10": ("STAR", "STAR"),
+             "12": ("APP", "Instrument Approach Chart"), "13": ("REF", "Visual Approach Chart")}
+_PT_SLOWA = {"HEL": "Helicopter", "TKOF": "Take-off", "RCF": "Radio Communication Failure", "NON": "Non", "RNAV": "RNAV",
+             "RWY": "RWY", "AND": "and", "OF": "of", "SID": "SID", "STAR": "STAR", "VFR": "VFR", "ATC": "ATC"}
+
+
+def _pt_z_pliku(plik, icao):
+    m = re.fullmatch(rf"LP_AD_2(?:_\d{{2}})?_{icao}_(.+?)(?:_en|_pt)?", plik, re.I)
+    if not m:
+        return None
+    reszta = m.group(1)
+    n = re.fullmatch(r"(\d{2})-\d+[A-Z]?", reszta)
+    if n:
+        return _PT_AD224.get(n.group(1))
+    if re.fullmatch(r"[\d_-]+", reszta):
+        return None
+    reszta = re.sub(r"RWY_?(\d)", r"RWY \1", reszta, flags=re.I)
+    slowa = [_PT_SLOWA.get(w.upper(), w.capitalize() if not re.match(r"\d", w) else w) for w in re.split(r"[_ ]", reszta) if w]
+    t = re.sub(r"\bRWY(\d)", r"RWY \1", " ".join(slowa))
+    t = t.replace("Non RNAV", "Non-RNAV")
+    if re.search(r"\bSID\b", t):
+        return "SID", t
+    if re.search(r"\bSTAR\b", t):
+        return "STAR", t
+    return "REF", t
 
 
 def _karty_ad2(icao, url):
@@ -396,12 +433,14 @@ def _karty_ad2(icao, url):
         opis = _czysc(KOD_KARTY.sub("", tekst).replace("|", " - "))
         opis = re.sub(r"(\s*-\s*){2,}", " - ", opis).strip(" -")
         opis = re.sub(rf"\b{icao}\b\s*[-–:]?\s*", "", opis).strip(" -–")   # "EPGD - AERODROME CHART" -> "AERODROME CHART"
+        if re.fullmatch(r"(click\s+)?here\.?|link|tutaj|ici", opis, re.I) and not KOD_KARTY.search(tekst):
+            continue          # odnośnik w tekście (np. instrukcja narzędzia), nie karta
         if not opis or len(opis) < 3:
             opis = _czysc(a.get_text(" ", strip=True)) or os.path.basename(urlparse(u).path)
         plik = os.path.splitext(os.path.basename(urlparse(u).path))[0]
         if re.fullmatch(rf"[A-Z]{{2}}[-_ ]?AD[-_ ]?2[-_. ]{icao}([-_][a-z]{{2}}[-_][A-Z]{{2}})?", plik, re.I):
             continue          # PDF całego rozdziału AD 2 (tekst), a nie karta
-        zp = z_nazwy_pliku(opis, icao)
+        zp = z_nazwy_pliku(opis, icao) or _pt_z_pliku(plik, icao)
         if not zp and (smieciowa(ladna_nazwa(opis, kategoria(opis))) or len(opis) < 12):
             zp = z_nazwy_pliku(plik, icao) or z_kodu(opis, icao) or z_kodu(plik, icao)
         if zp and zp[0] == "POMIN":
@@ -465,7 +504,7 @@ MINUT_PDF = 55          # czas na czytanie PDF w jednym przebiegu (po zebraniu l
 KONIEC_PDF = time.time() + MINUT_PDF * 60
 
 
-WERSJA_ANALIZY = 5   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
+WERSJA_ANALIZY = 6   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
 ZAPASOWE = {"GND": "Aerodrome Chart", "APP": "Instrument Approach Chart", "SID": "SID", "STAR": "STAR", "REF": "Reference Chart"}
 
 
@@ -495,7 +534,7 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
         if w.get("v") == WERSJA_ANALIZY:
             return True
         # starsze wersje (bez fontTools / dekodowania '/MT'): zostaw udane odczyty, ponów te bez wyniku
-        return w.get("v") in (2, 3, 4) and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
+        return w.get("v") in (2, 3, 4, 5) and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
     # kolejność: SID/STAR najpierw, potem nigdy nieczytane, potem odświeżanie; kraje wymieszane losowo
     import random
     los = random.Random(time.time())

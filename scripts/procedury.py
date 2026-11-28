@@ -66,6 +66,10 @@ def z_tekstu(tekst: str) -> list:
         # 'ROPU1W' (skrócony kod) – zapisany już w formie MCDU
         k = mcdu(p, c, l)
         znalezione[k] = znalezione.get(k, 0) + (2 if p in slowa else 1)
+    # wojskowe/krajowe oznaczenia typu 'SID BE 04F' -> 'BE04F'
+    for m in re.finditer(r"\b(?:SID|STAR)\s+([A-Z]{2})\s?(\d{2}[A-Z])\b", t):
+        if m.group(1) not in STOP:
+            znalezione[m.group(1) + m.group(2)] = znalezione.get(m.group(1) + m.group(2), 0) + 2
     # odrzuć pojedyncze, niepotwierdzone trafienia gdy są lepsze
     wynik = [k for k, v in znalezione.items() if v >= 2 or len(znalezione) <= 3]
     return sorted(set(wynik))
