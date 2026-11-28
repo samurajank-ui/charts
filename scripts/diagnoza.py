@@ -27,6 +27,14 @@ for u in args:
         print("BŁĄD:", e)
         continue
     print("STATUS:", r.status_code, "| FINAL:", r.url, "| TYPE:", r.headers.get("content-type"), "| BYTES:", len(r.content))
+    if r.content.startswith(b"%PDF"):
+        sys.path.insert(0, "scripts")
+        from tytuly import analiza, tekst_pdf
+        t = tekst_pdf(r.content, stron=3, ocr=True)
+        print("PDF TEXT:", re.sub(r"\s+", " ", t)[:3000])
+        for kat in ("APP", "GND", "REF", "SID"):
+            print("  ANALIZA", kat, analiza(t, kat))
+        continue
     if u.lower().split("?")[0].endswith((".js", ".json", ".xml")):
         t = r.text
         if wzor:
