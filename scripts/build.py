@@ -35,7 +35,7 @@ logging.getLogger("pypdf").setLevel(logging.ERROR)   # ostrzeżenia o czcionkach
 
 sys.path.insert(0, os.path.dirname(__file__))
 from procedury import z_nazwy_faa  # noqa: E402
-from tytuly import analiza, tekst_pdf  # noqa: E402
+from tytuly import _ocr, analiza, tekst_pdf  # noqa: E402
 from kategorie import FAA, KOLEJNOSC, kategoria, ladna_nazwa, pasy, z_kodu, z_nazwy_pliku  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -465,7 +465,7 @@ MINUT_PDF = 55          # czas na czytanie PDF w jednym przebiegu (po zebraniu l
 KONIEC_PDF = time.time() + MINUT_PDF * 60
 
 
-WERSJA_ANALIZY = 4   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
+WERSJA_ANALIZY = 5   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
 ZAPASOWE = {"GND": "Aerodrome Chart", "APP": "Instrument Approach Chart", "SID": "SID", "STAR": "STAR", "REF": "Reference Chart"}
 
 
@@ -495,7 +495,7 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
         if w.get("v") == WERSJA_ANALIZY:
             return True
         # starsze wersje (bez fontTools / dekodowania '/MT'): zostaw udane odczyty, ponów te bez wyniku
-        return w.get("v") in (2, 3) and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
+        return w.get("v") in (2, 3, 4) and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
     # kolejność: SID/STAR najpierw, potem nigdy nieczytane, potem odświeżanie; kraje wymieszane losowo
     import random
     los = random.Random(time.time())
@@ -521,8 +521,12 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             if len(tekst.strip()) < 20:
                 puste.append(u)
             w = analiza(tekst, kat_url[u])
+            if (w["c"] or kat_url[u]) in ("SID", "STAR") and not w["p"] and len(re.findall(r"[A-Z]{5}", tekst.upper())) >= 3:
+                # tekst był, ale bez nazw procedur (np. Norwegia: nazwy tylko w grafice) -> OCR mimo wszystko
+                tekst += "\n" + _ocr(r.content)
+                w = analiza(tekst, kat_url[u])
             w["v"] = WERSJA_ANALIZY
-            if kat_url[u] in ("SID", "STAR") and not w["p"]:
+            if ((w["c"] or kat_url[u]) in ("SID", "STAR") and not w["p"]) or not w["t"]:
                 w["x"] = re.sub(r"\s+", " ", tekst)[:400]     # do diagnozy w logu
             return u, w
         except Exception as e:  # noqa: BLE001
@@ -691,6 +695,8 @@ def main():
         log(f"== {z['id']}: {len(lot)} lotnisk, {len(wsz)} kart | nazwy ogólne: {len(zapas)} | "
             f"SID/STAR z MCDU: {z_mcdu}/{len(ss)} ({100 * z_mcdu // max(1, len(ss))}%)"
             + (f" | bez MCDU np. {bez[:10]}" if bez else "")
+            + (f" | ogólne przeczytane: {sum(1 for _, k in zapas if isinstance(cache.get(k['u']), dict))}/{len(zapas)}, tekst: "
+               f"{next((cache[k['u']]['x'] for _, k in zapas if isinstance(cache.get(k['u']), dict) and cache[k['u']].get('x')), '')[:300]!r}" if zapas else "")
             + (f" | tekst karty bez MCDU: {next((cache[k['u']]['x'] for _, k in ss if isinstance(cache.get(k['u']), dict) and cache[k['u']].get('x')), '')[:300]!r}" if bez else "")
             + (f" | przykłady nazw ogólnych: {[(i, k['n'], k.get('o', '')[:35]) for i, k in zapas[:4]]}" if zapas else ""))
 
