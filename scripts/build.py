@@ -33,7 +33,7 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, os.path.dirname(__file__))
 from procedury import z_nazwy_faa  # noqa: E402
 from tytuly import analiza, tekst_pdf  # noqa: E402
-from kategorie import FAA, KOLEJNOSC, kategoria, ladna_nazwa, pasy, z_nazwy_pliku  # noqa: E402
+from kategorie import FAA, KOLEJNOSC, kategoria, ladna_nazwa, pasy, z_kodu, z_nazwy_pliku  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "site", "data")
@@ -375,7 +375,12 @@ def _karty_ad2(icao, url):
         opis = re.sub(rf"\b{icao}\b\s*[-–:]?\s*", "", opis).strip(" -–")   # "EPGD - AERODROME CHART" -> "AERODROME CHART"
         if not opis or len(opis) < 3:
             opis = _czysc(a.get_text(" ", strip=True)) or os.path.basename(urlparse(u).path)
-        zp = z_nazwy_pliku(opis, icao) or z_nazwy_pliku(os.path.splitext(os.path.basename(urlparse(u).path))[0], icao)
+        plik = os.path.splitext(os.path.basename(urlparse(u).path))[0]
+        if re.fullmatch(rf"[A-Z]{{2}}[-_ ]?AD[-_ ]?2[-_. ]{icao}([-_][a-z]{{2}}[-_][A-Z]{{2}})?", plik, re.I):
+            continue          # PDF całego rozdziału AD 2 (tekst), a nie karta
+        zp = z_nazwy_pliku(opis, icao) or z_nazwy_pliku(plik, icao)
+        if not zp and (smieciowa(ladna_nazwa(opis, kategoria(opis))) or len(opis) < 12):
+            zp = z_kodu(opis, icao) or z_kodu(plik, icao)
         if zp and zp[0] == "POMIN":
             continue
         if zp:
@@ -454,6 +459,8 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
     zadania = [k for l in lotniska.values() for k in l["karty"] if not tylko_procedury or k["c"] in ("SID", "STAR")]
     def aktualne(u):
         w = cache.get(u)
+        if tylko_procedury and isinstance(w, dict) and "p" in w:
+            return True                      # FAA: liczą się tylko oznaczenia MCDU – nie czytaj ponownie
         return isinstance(w, dict) and w and w.get("v") == WERSJA_ANALIZY
     # najpierw karty nigdy nieczytane, potem przeczytane starszą wersją analizy
     nowe = sorted({k["u"] for k in zadania if not aktualne(k["u"])}, key=lambda u: (isinstance(cache.get(u), dict), u))
@@ -482,7 +489,7 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             log("    ! PDF", u, e)
             return u, None
 
-    with ThreadPoolExecutor(10) as ex:
+    with ThreadPoolExecutor(16) as ex:
         for u, wynik in ex.map(czytaj, nowe):
             if wynik is not None:
                 cache[u] = wynik

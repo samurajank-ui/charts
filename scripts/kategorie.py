@@ -1,4 +1,5 @@
 """Klasyfikacja kart w stylu Navigraph: GND (lotnisko/kołowanie), SID, STAR, APP, REF (pozostałe)."""
+import os
 import re
 
 KOLEJNOSC = ["GND", "SID", "STAR", "APP", "REF"]
@@ -83,6 +84,13 @@ _KOD_PLIKU = {"ADC": ("GND", "Aerodrome Chart"), "APDC": ("GND", "Parking/Dockin
               "AOC": ("REF", "Aerodrome Obstacle Chart"), "VAC": ("REF", "Visual Approach Chart"), "ARC": ("REF", "Area Chart"),
               "PATC": ("REF", "Precision Approach Terrain Chart"), "ATCSMAC": ("REF", "ATC Surveillance Minimum Altitude Chart"),
               "MRC": ("REF", "Minimum Radar Altitude Chart"), "INSTR": ("REF", "Instructions")}
+_KOD_PLIKU.update({
+    "AGMC": ("GND", "Ground Movement Chart"), "AMG": ("GND", "Ground Movement Chart"), "HS": ("GND", "Hot Spot Chart"),
+    "HOTSPOT": ("GND", "Hot Spot Chart"), "DEICING": ("GND", "De-icing Chart"), "TAXI": ("GND", "Taxi Routes Chart"),
+    "MVA": ("REF", "Minimum Vectoring Altitude Chart"), "ENV": ("REF", "Approach Environment Chart"),
+    "NOISE": ("REF", "Noise Abatement Chart"), "VFR": ("REF", "VFR Chart"), "TMA": ("REF", "Area Chart"),
+})
+_KOD_RE = re.compile(r"(" + "|".join(sorted(_KOD_PLIKU, key=len, reverse=True)) + r")(\d{0,3}[A-Z]?)$")
 _NIE_KARTY = {"DATA", "TXT", "TEXT", "FASDB", "CODE"}
 
 
@@ -107,6 +115,37 @@ def z_nazwy_pliku(opis: str, icao: str):
         inne = [x for x in inne if x not in ("RNAV", "RNP", "GNSS")]
         return kat, (" ".join([nazwa, rwy] + inne).strip() + rnav)
     return kat, (nazwa + (f" {int(nr[0])}" if nr and nr[0] not in ("01", "1") else "") + (f" {rwy}" if rwy else "")).strip()
+
+
+def z_kodu(tekst: str, icao: str = ""):
+    """Rozpoznaje rodzaj karty po kodzie w nazwie pliku lub krótkim opisie, np. 'EBBR_ADC01_v66.pdf' -> ('GND','Aerodrome Chart'),
+    'LP_AD_2_LPPT_IAC_RWY03_ILS_en.pdf' -> ('APP','ILS RWY 03'), 'VAC - ICAO' -> ('REF','Visual Approach Chart')."""
+    t = [x for x in re.split(r"[_\-.\s/]+", os.path.basename(tekst or "").upper()) if x and x not in ("PDF", "EN", "ICAO", icao)]
+    for i, x in enumerate(t):
+        m = _KOD_RE.fullmatch(x)
+        if not m:
+            continue
+        kod = m.group(1)
+        kat, nazwa = _KOD_PLIKU[kod]
+        reszta = t[i + 1:]
+        rw = []
+        for j, y in enumerate(reszta):
+            if re.fullmatch(r"RWY\d{2}[LRC]?", y):
+                rw.append(y[3:])
+            elif y == "RWY" and j + 1 < len(reszta) and re.fullmatch(r"\d{2}[LRC]?", reszta[j + 1]):
+                rw.append(reszta[j + 1])
+        if "ENV" in reszta:
+            return "REF", "Approach Environment Chart" + (f" RWY {'/'.join(rw)}" if rw else "")
+        rwy = f" RWY {'/'.join(rw)}" if rw else ""
+        if kat == "APP":
+            typ = [y for y in reszta if re.fullmatch(r"ILS|LOC|RNP|RNAV|VOR|NDB|DME|GLS|LPV|[XYZ]", y)]
+            return kat, (" ".join(typ) + rwy).strip() or "Instrument Approach Chart"
+        if kat in ("SID", "STAR"):
+            rnav = " (RNAV)" if any(y in ("RNAV", "RNP", "GNSS") for y in reszta) else ""
+            return kat, f"{nazwa}{rwy}{rnav}"
+        nr = m.group(2).lstrip("0")
+        return kat, nazwa + (f" {nr}" if nr and nr not in ("1",) and kat == "GND" else "") + rwy
+    return None
 
 
 if __name__ == "__main__":

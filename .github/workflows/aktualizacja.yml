@@ -2,7 +2,7 @@ name: Aktualizacja kart
 
 on:
   schedule:
-    - cron: "17 */4 * * *"   # co 4 h – odczyt PDF rozkłada się na kilka przebiegów, potem każdy trwa kilka minut
+    - cron: "17 * * * *"   # co godzinę, dopóki wszystkie PDF nie zostaną przeczytane (potem wystarczy rzadziej)
   workflow_dispatch:
     inputs:
       tylko:
