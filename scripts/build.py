@@ -450,6 +450,8 @@ def _karty_ad2(icao, url):
             karty.append({"n": n, "o": opis, "c": kat, "r": pasy(n), "k": kod, "u": u})
             continue
         kat = kategoria(opis)
+        if kat == "APP" and re.search(r"VISUAL\s+APPROACH\s+CHART", opis, re.I) and not re.search(r"\bRWY\b", opis, re.I):
+            kat = "REF"
         karty.append({"n": ladna_nazwa(opis, kat), "o": opis, "c": kat, "r": pasy(opis), "k": kod, "u": u})
     if not karty:
         log(f"      {icao}: 0 kart na {r.url} ({len(r.text)} B, title={soup.title.get_text(strip=True)[:60] if soup.title else ''})")
@@ -504,7 +506,7 @@ MINUT_PDF = 55          # czas na czytanie PDF w jednym przebiegu (po zebraniu l
 KONIEC_PDF = time.time() + MINUT_PDF * 60
 
 
-WERSJA_ANALIZY = 6   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
+WERSJA_ANALIZY = 7   # zwiększ po zmianie reguł w tytuly.py/procedury.py – karty zostaną przeczytane ponownie
 ZAPASOWE = {"GND": "Aerodrome Chart", "APP": "Instrument Approach Chart", "SID": "SID", "STAR": "STAR", "REF": "Reference Chart"}
 
 
@@ -534,7 +536,7 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
         if w.get("v") == WERSJA_ANALIZY:
             return True
         # starsze wersje (bez fontTools / dekodowania '/MT'): zostaw udane odczyty, ponów te bez wyniku
-        return w.get("v") in (2, 3, 4, 5) and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
+        return w.get("v") in (2, 3, 4, 5, 6) and bool(w.get("p") if kat_url[u] in ("SID", "STAR") else w.get("t"))
     # kolejność: SID/STAR najpierw, potem nigdy nieczytane, potem odświeżanie; kraje wymieszane losowo
     import random
     los = random.Random(time.time())
@@ -560,10 +562,30 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
             if len(tekst.strip()) < 20:
                 puste.append(u)
             w = analiza(tekst, kat_url[u])
+            if (w["c"] or kat_url[u]) in ("SID", "STAR") and not w["p"]:
+                dalej = tekst_pdf(r.content, stron=8)      # np. Arlanda: strony opisowe, oznaczenia dalej
+                if len(dalej) > len(tekst) + 50:
+                    w2 = analiza(dalej, kat_url[u])
+                    if w2["p"]:
+                        w, tekst = w2, dalej
             if (w["c"] or kat_url[u]) in ("SID", "STAR") and not w["p"] and len(re.findall(r"[A-Z]{5}", tekst.upper())) >= 3:
                 # tekst był, ale bez nazw procedur (np. Norwegia: nazwy tylko w grafice) -> OCR mimo wszystko
                 tekst += "\n" + _ocr(r.content)
                 w = analiza(tekst, kat_url[u])
+            if not w["t"] and (w["c"] or kat_url[u]) not in ("SID", "STAR"):
+                # pierwsze strony to często lista zmian (Hiszpania, Portugalia) – karta jest dalej
+                dalej = tekst_pdf(r.content, stron=6)
+                if len(dalej) > len(tekst) + 50:
+                    w2 = analiza(dalej, kat_url[u])
+                    if w2["t"]:
+                        w, tekst = w2, dalej
+            if not w["t"] and "INTENTIONALLY LEFT BLANK" in tekst.upper() and len(re.sub(r"\s+", " ", tekst)) < 400:
+                try:
+                    from pypdf import PdfReader
+                    if len(PdfReader(io.BytesIO(r.content)).pages) == 1:
+                        w["pusta"] = True          # strona celowo pusta – nie pokazuj jako karty
+                except Exception:  # noqa: BLE001
+                    pass
             w["v"] = WERSJA_ANALIZY
             if ((w["c"] or kat_url[u]) in ("SID", "STAR") and not w["p"]) or not w["t"]:
                 w["x"] = re.sub(r"\s+", " ", tekst)[:400]     # do diagnozy w logu
@@ -613,6 +635,7 @@ def dodaj_procedury(lotniska, cache, tylko_procedury=False):
                 k["p"] = w["p"]
             if w.get("r") and not k.get("r"):
                 k["r"] = w["r"]
+        l["karty"] = [k for k in l["karty"] if not (isinstance(cache.get(k["u"]), dict) and cache[k["u"]].get("pusta"))]
         l["karty"].sort(key=lambda k: (KOLEJNOSC.index(k["c"]), _klucz_kodu(k.get("k", "")), k["n"]))
         # ostatnia deska ratunku: nigdy nie pokazuj śmieci jako nazwy
         for k in l["karty"]:

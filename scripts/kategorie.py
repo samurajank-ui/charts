@@ -60,6 +60,7 @@ def ladna_nazwa(nazwa: str, kat: str) -> str:
     n = re.sub(r"\s+", " ", n).strip()
     n = re.sub(r"^\d{1,2}\.\s+", "", n)                       # "13. Instrument Approach Chart" (Łotwa)
     n = re.sub(r"\s*[—–]\s*", " - ", n)
+    n = re.sub(r"\s+-\s+\S*\d\S*_\S*$", "", n)          # "... - ICAO - 1817_EVRA_2_24_14_20260903" (nazwa pliku)
     if kat in ("GND", "REF"):
         from tytuly import analiza                   # nazwa kanoniczna jak w Navigraph: "Parking/Docking Chart"
         w = analiza(n, kat)
